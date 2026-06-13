@@ -1611,10 +1611,18 @@ export default function TimberHearth() {
     const onOrient = (e) => {
       if (!tiltEnabled || e.beta == null || e.gamma == null) return;
       if (!tiltBase) tiltBase = { beta: e.beta, gamma: e.gamma };  // position de repos capturée à l'activation
+      // beta/gamma sont relatifs au PORTRAIT naturel ; on tourne le vecteur selon l'angle d'écran → gère le paysage.
+      let ang = 0;
+      if (window.screen && window.screen.orientation && window.screen.orientation.angle != null) ang = window.screen.orientation.angle;
+      else if (window.orientation != null) ang = window.orientation;
+      const a = ang * Math.PI / 180, ca = Math.cos(a), sa = Math.sin(a);
+      const dG = e.gamma - tiltBase.gamma, dB = e.beta - tiltBase.beta;
+      const sx = dG * ca + dB * sa;  // composante « écran horizontale » → lacet
+      const sy = dB * ca - dG * sa;  // composante « écran verticale »  → tangage
       const dz = 4, span = 32;                                     // zone morte 4°, pleine échelle à 32° d'inclinaison
       const f = (v) => { const s = Math.sign(v) * Math.max(0, Math.abs(v) - dz); return THREE.MathUtils.clamp(s / span, -1, 1); };
-      tiltLook.x = f(e.gamma - tiltBase.gamma); // inclinaison gauche/droite → lacet
-      tiltLook.y = f(e.beta - tiltBase.beta);   // inclinaison avant/arrière → tangage
+      tiltLook.x = f(sx); // inclinaison latérale (écran) → lacet
+      tiltLook.y = f(sy); // inclinaison avant/arrière (écran) → tangage
     };
     window.addEventListener("deviceorientation", onOrient);
     const onClick = () => { if (dlgOpen || showLogRef.current) { startAudio(); return; } renderer.domElement.requestPointerLock(); startAudio(); };

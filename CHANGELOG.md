@@ -4,6 +4,13 @@ Toutes les évolutions notables de ce projet sont consignées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/).
 
+## [0.7.3] — 2026-06-13
+
+### Modifié
+- **EVO-7 — Visée capteurs en paysage** : `beta`/`gamma` étant relatifs au portrait naturel, le vecteur
+  d'inclinaison est désormais **pivoté selon l'angle d'écran** (`screen.orientation.angle`) — le mapping
+  lacet/tangage est donc correct en **portrait comme en paysage** (les deux sens).
+
 ## [0.7.2] — 2026-06-13
 
 ### Ajouté
