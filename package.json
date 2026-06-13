@@ -1,7 +1,7 @@
 {
   "name": "timberhearth",
   "private": true,
-  "version": "0.6.0",
+  "version": "0.7.0",
   "type": "module",
   "description": "Âtrebois (Timber Hearth) — hommage non-commercial à Outer Wilds : exploration spatiale 3D dans le navigateur (React + three.js r178 + Vite).",
   "license": "MIT",

@@ -4,6 +4,26 @@ Toutes les évolutions notables de ce projet sont consignées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/).
 
+## [0.7.0] — 2026-06-13
+
+### Ajouté
+- **EVO-7 — Support écran tactile (smartphone / tablette)** : détection automatique du tactile
+  (`ontouchstart` / `maxTouchPoints`) ; les commandes tactiles ne s'affichent **que** dans ce cas.
+  **Joystick virtuel XY** (déplacement) à gauche, **zone de visée au glissé du doigt** à droite, et
+  **boutons pour les fonctions non remplaçables par un déplacement** : à pied (Saut, Courir, E, F, C, Journal),
+  en vaisseau (Monter/Descendre, Alunissage, E, Verrouiller [T], Pilote auto [Y], Sortir, Journal). Le tout
+  s'injecte dans le même pipeline d'entrées que clavier/manette (fusion par frame).
+
+### Corrigé
+- **Alunissage impossible** sur un astre verrouillé + pilote auto : le pilote auto et l'atterrissage se
+  disputaient la commande et la lune (en orbite rapide) ne pouvait être « rattrapée ». L'**atterrissage est
+  désormais spéculatif** (touche **`G`**) — **hors physique** (gravité/vitesses coupées) : le vaisseau glisse
+  jusqu'au sol de l'astre **verrouillé** (sinon le plus proche) en **suivant son mouvement**, puis se pose. Le
+  pilote auto est coupé automatiquement pendant la manœuvre.
+- **Voûte étoilée mal répartie** (zones très denses, anneaux concentriques) : l'ancien échantillonnage
+  `step(hash(grille cubique))` est remplacé par un **champ d'étoiles cellulaire** (un point net par cellule,
+  position aléatoire, magnitudes variées) — distribution homogène, sans bandes ni arcs.
+
 ## [0.6.0] — 2026-06-13
 
 ### Ajouté

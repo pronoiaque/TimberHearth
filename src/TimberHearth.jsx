@@ -50,6 +50,16 @@ uniform vec3 uSun; uniform float uSuper; uniform float uDying; varying vec3 vDir
 const vec3 DAY_Z=vec3(0.20,0.38,0.65),DAY_H=vec3(0.58,0.78,0.95),DUSK=vec3(0.77,0.35,0.30);
 const vec3 NIG_Z=vec3(0.03,0.05,0.12),NIG_H=vec3(0.10,0.12,0.22);
 float hash(vec3 p){return fract(sin(dot(floor(p),vec3(127.1,311.7,74.7)))*43758.5453);}
+// EVO-6+ : champ d'étoiles cellulaire — un point net (jitter) par cellule, densité uniforme,
+// sans les arcs ni anneaux concentriques de l'ancien step(hash(grille)).
+float starField(vec3 d){
+  vec3 p=d*230.0; vec3 ip=floor(p); vec3 fp=fract(p)-0.5;
+  float present=step(0.93,hash(ip));                          // ~7% des cellules portent une étoile
+  vec3 j=vec3(hash(ip+11.5),hash(ip+27.3),hash(ip+41.7))-0.5; // position aléatoire dans la cellule
+  float dd=length(fp-j*0.7);
+  float bright=0.45+0.55*hash(ip+5.1);                        // magnitudes variées
+  return present*bright*smoothstep(0.16,0.0,dd);
+}
 void main(){
   vec3 d=normalize(vDir); float sd=dot(d,uSun); float zen=clamp(d.y,0.0,1.0); float sh=uSun.y;
   float day=clamp(sh*2.0+0.5,0.0,1.0);
@@ -57,7 +67,7 @@ void main(){
   float dusk=1.0-clamp(abs(sh)*3.0,0.0,1.0); sky=mix(sky,DUSK,dusk*0.6);
   sky+=vec3(1.0,0.95,0.7)*pow(clamp(sd,0.0,1.0),32.0)*day*0.7;
   sky=mix(sky,vec3(1.0,0.97,0.85),smoothstep(0.9975,0.999,sd));
-  float starB=clamp(1.0-day*1.5,0.0,1.0); sky+=vec3(step(0.997,hash(d*420.0))*starB*0.85);
+  float starB=clamp(1.0-day*1.5,0.0,1.0); sky+=vec3(0.92,0.95,1.0)*starField(d)*starB*0.95;
   sky=mix(sky,sky*vec3(1.25,0.55,0.40)+vec3(0.06,0.0,0.0),uDying*0.85);
   sky=mix(sky,vec3(0.9,0.3,0.1),uSuper*0.5);
   gl_FragColor=vec4(sky,1.0);
@@ -357,6 +367,42 @@ const terrainHeight = (n) => {
 };
 const groundR = (n) => CFG.R + terrainHeight(n); // rayon du sol d'Âtrebois dans la direction unitaire n
 
+// ===================== EVO-7 — Couche tactile (smartphone / tablette) =====================
+// Pad de déplacement XY (joystick virtuel) — pilote KeyW/S/A/D via l'API impérative.
+function TouchStick({ api }) {
+  const ref = useRef(null), idRef = useRef(null);
+  const [k, setK] = useState({ x: 0, y: 0 });
+  const RAD = 52;
+  const upd = (t) => { const el = ref.current; if (!el) return; const r = el.getBoundingClientRect(); let dx = t.clientX - (r.left + r.width / 2), dy = t.clientY - (r.top + r.height / 2); const len = Math.hypot(dx, dy) || 1; const cl = Math.min(len, RAD); dx = dx / len * cl; dy = dy / len * cl; setK({ x: dx, y: dy }); api.current?.move(dx / RAD, dy / RAD); };
+  const start = (e) => { e.preventDefault(); api.current?.start(); const t = e.changedTouches[0]; idRef.current = t.identifier; upd(t); };
+  const move = (e) => { for (const t of e.changedTouches) if (t.identifier === idRef.current) upd(t); };
+  const end = (e) => { for (const t of e.changedTouches) if (t.identifier === idRef.current) { idRef.current = null; setK({ x: 0, y: 0 }); api.current?.move(0, 0); } };
+  return (
+    <div ref={ref} onTouchStart={start} onTouchMove={move} onTouchEnd={end} onTouchCancel={end}
+      style={{ position: "absolute", left: 18, bottom: 24, width: 124, height: 124, borderRadius: "50%", background: "rgba(125,211,252,.08)", border: "1px solid rgba(125,211,252,.35)", touchAction: "none", pointerEvents: "auto" }}>
+      <div style={{ position: "absolute", left: "50%", top: "50%", width: 50, height: 50, marginLeft: -25, marginTop: -25, borderRadius: "50%", background: "rgba(125,211,252,.35)", transform: `translate(${k.x}px,${k.y}px)` }} />
+    </div>
+  );
+}
+// Zone de visée (glissé du doigt) — applique le regard comme la souris.
+function TouchLookZone({ api }) {
+  const idRef = useRef(null), last = useRef({ x: 0, y: 0 });
+  const start = (e) => { api.current?.start(); const t = e.changedTouches[0]; idRef.current = t.identifier; last.current = { x: t.clientX, y: t.clientY }; };
+  const move = (e) => { for (const t of e.changedTouches) if (t.identifier === idRef.current) { const dx = t.clientX - last.current.x, dy = t.clientY - last.current.y; last.current = { x: t.clientX, y: t.clientY }; api.current?.look(dx * 1.3, dy * 1.3); } };
+  const end = (e) => { for (const t of e.changedTouches) if (t.identifier === idRef.current) idRef.current = null; };
+  return <div onTouchStart={start} onTouchMove={move} onTouchEnd={end} onTouchCancel={end}
+    style={{ position: "absolute", right: 0, top: 0, width: "55%", height: "100%", touchAction: "none", pointerEvents: "auto" }} />;
+}
+// Bouton tactile (impulsion via onDown, ou maintien via onDown/onUp).
+function TouchBtn({ label, color, onDown, onUp }) {
+  return <div onTouchStart={(e) => { e.preventDefault(); e.stopPropagation(); onDown && onDown(); }}
+    onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onUp && onUp(); }}
+    onTouchCancel={() => onUp && onUp()}
+    style={{ minWidth: 50, height: 46, padding: "0 8px", borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: color || "#e2e8f0", background: "rgba(8,20,32,.6)", border: `1px solid ${color || "rgba(125,211,252,.4)"}`, touchAction: "none", pointerEvents: "auto", userSelect: "none" }}>
+    {label}
+  </div>;
+}
+
 // ===================== EVO-5 — Remappage manette / joystick (menu « M ») =====================
 // Périphérique de référence : Thrustmaster T16000M (6 axes DSoF · 16 boutons · hat).
 // Les actions « maintien » injectent une touche clavier équivalente dans `keys` (le moteur ne change pas) ;
@@ -445,6 +491,9 @@ export default function TimberHearth() {
   const lockedRef = useRef(null);    // id de l'astre verrouillé
   const autoRef = useRef(false);     // pilote auto actif
   const candidateRef = useRef(null); // astre actuellement au centre du réticule
+  // EVO-7 : support écran tactile (smartphone / tablette)
+  const [isTouch] = useState(() => typeof window !== "undefined" && (("ontouchstart" in window) || (navigator.maxTouchPoints || 0) > 0));
+  const touchApiRef = useRef(null);  // API impérative pont rendu→moteur
   const overlayRef = useRef(null);          // fondu mort/supernova piloté en JS
   const hudRef = useRef(hud); hudRef.current = hud;
   const dialogRef = useRef(dialog); dialogRef.current = dialog;
@@ -548,6 +597,8 @@ export default function TimberHearth() {
       if (best) return best;
       return homeBody;
     };
+    // EVO-6+ : astre le plus proche (par distance à la surface) — cible par défaut de l'atterrissage spéculatif
+    const nearestBody = (p) => { let best = homeBody, bd = Infinity; for (const b of BODIES) { const d = p.distanceTo(b.pos) - b.R; if (d < bd) { bd = d; best = b; } } return best; };
 
     // --- Âtrebois : corps "home" (fixe à l'origine) ---
     const homeBody = registerBody({ id: "atrebois", name: "Âtrebois", center: ZERO.clone(), R: CFG.R, G: CFG.G, soi: null, home: true, hasShaft: true });
@@ -1358,6 +1409,8 @@ export default function TimberHearth() {
     const kbd = {};
     const padHold = {};
     const padEdgePrev = {};
+    const touchHold = {};                  // EVO-7 : touches maintenues par la couche tactile
+    const touchMove = { x: 0, y: 0 };      // EVO-7 : sortie du pad de déplacement XY (-1..1)
     let padAxisLook = { yaw: 0, pitch: 0, roll: 0 };
     let activeNpc = null;
     let dlgOpen = false;                 // flag SYNCHRONE (dialogRef est async via React)
@@ -1488,20 +1541,43 @@ export default function TimberHearth() {
           padAxisLook = { yaw: axisVal(gp, binds.axYaw), pitch: axisVal(gp, binds.axPitch), roll: axisVal(gp, binds.axRoll) };
         }
       }
-      for (const c of SYNC_CODES) keys[c] = !!(kbd[c] || padHold[c]);
+      // EVO-7 : déplacement tactile (pad XY) → injection numérique dans les touches directionnelles
+      const tm = touchMove;
+      touchHold["KeyW"] = tm.y < -0.35; touchHold["KeyS"] = tm.y > 0.35;
+      touchHold["KeyD"] = tm.x > 0.35;  touchHold["KeyA"] = tm.x < -0.35;
+      for (const c of SYNC_CODES) keys[c] = !!(kbd[c] || padHold[c] || touchHold[c]);
     };
-    const onMouse = (e) => {
-      if (document.pointerLockElement !== renderer.domElement) return;
+    // Visée réutilisable (souris + glissé tactile) : mx/my = déplacement en pixels
+    const applyLook = (mx, my) => {
       if (flyingRef.current) {
-        // rotation locale du vaisseau : yaw autour de Y local, pitch autour de X local
-        const qYaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -e.movementX * 0.0022);
-        const qPitch = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -e.movementY * 0.0022);
+        const qYaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -mx * 0.0022);
+        const qPitch = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -my * 0.0022);
         shipState.quat.multiply(qYaw).multiply(qPitch).normalize();
         return;
       }
       const up = player.pos.clone().normalize();
-      player.forward.applyQuaternion(new THREE.Quaternion().setFromAxisAngle(up, -e.movementX * 0.0022)).normalize();
-      player.pitch = THREE.MathUtils.clamp(player.pitch - e.movementY * 0.0022, -1.4, 1.4);
+      player.forward.applyQuaternion(new THREE.Quaternion().setFromAxisAngle(up, -mx * 0.0022)).normalize();
+      player.pitch = THREE.MathUtils.clamp(player.pitch - my * 0.0022, -1.4, 1.4);
+    };
+    const onMouse = (e) => {
+      if (document.pointerLockElement !== renderer.domElement) return;
+      applyLook(e.movementX, e.movementY);
+    };
+    // EVO-7 : API impérative pour la couche tactile (le rendu React ne voit pas le closure de l'effet)
+    touchApiRef.current = {
+      start: () => startAudio(),
+      look: (dx, dy) => applyLook(dx, dy),
+      move: (x, y) => { touchMove.x = x; touchMove.y = y; },
+      hold: (code, on) => { touchHold[code] = !!on; },
+      tap: (id) => {
+        if (id === "interact") tryInteract();
+        else if (id === "scout") { if (!dlgOpen && !flyingRef.current) launchScout(); }
+        else if (id === "scope") { if (!dlgOpen && !flyingRef.current) { scopeOn = !scopeOn; setScope(scopeOn); } }
+        else if (id === "log") setShowLog((v) => !v);
+        else if (id === "exit") { if (flyingRef.current) exitShip(); }
+        else if (id === "lock") { if (flyingRef.current) { if (lockedRef.current) { lockedRef.current = null; autoRef.current = false; } else if (candidateRef.current) lockedRef.current = candidateRef.current; } }
+        else if (id === "auto") { if (flyingRef.current && lockedRef.current) autoRef.current = !autoRef.current; }
+      },
     };
     const onClick = () => { if (dlgOpen || showLogRef.current) { startAudio(); return; } renderer.domElement.requestPointerLock(); startAudio(); };
     const dlgClick = () => { if (dlgOpen) advanceDialog(); };
@@ -1801,20 +1877,40 @@ export default function TimberHearth() {
 
       // ===================== PILOTAGE DU VAISSEAU =====================
       if (flyingRef.current) {
+        // axes locaux du vaisseau (utilisés partout : pilotage, caméra, flammes)
+        const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(shipState.quat);
+        const rgt = new THREE.Vector3(1, 0, 0).applyQuaternion(shipState.quat);
+        const upL = new THREE.Vector3(0, 1, 0).applyQuaternion(shipState.quat);
+        let thrusting = false, autolandActive = false, autopilotActive = false;
+        let upS, distS, sGroundR;
+        // ===== EVO-6+ : ATTERRISSAGE SPÉCULATIF (G) — hors physique (gravité/vitesses coupées), toujours fonctionnel =====
+        // cible = astre verrouillé sinon astre le plus proche ; glisse jusqu'au sol en suivant l'astre (lune mobile incluse).
+        const landTarget = lockedRef.current ? bodyById[lockedRef.current] : nearestBody(shipState.pos);
+        if (keys["KeyG"] && !shipState.landed && landTarget) {
+          autolandActive = true; autoRef.current = false;     // coupe le pilote auto pour éviter la course-poursuite
+          const relL = shipState.pos.clone().sub(landTarget.pos);
+          upS = relL.clone().normalize();
+          sGroundR = landTarget.home ? groundR(upS) : landTarget.R;
+          distS = relL.length();
+          const surf = landTarget.pos.clone().addScaledVector(upS, sGroundR + 2.2);
+          shipState.pos.lerp(surf, Math.min(1, dt * 1.6));     // descente scriptée (approche exponentielle)
+          shipState.vel.copy(landTarget.pos).sub(landTarget.prevPos).multiplyScalar(dt > 0 ? 1 / dt : 0); // colle au mouvement de l'astre
+          shipState.quat.slerp(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), upS), Math.min(1, dt * 3));
+          if (shipState.pos.distanceTo(surf) < 0.6) { shipState.pos.copy(surf); shipState.landed = true; }
+          res.o2 = Math.min(CFG.O2_MAX, res.o2 + CFG.O2_REFILL * dt);
+          if (landTarget.home) res.fuel = Math.min(CFG.FUEL_MAX, res.fuel + CFG.FUEL_REFILL * dt);
+          else learn("attlerock");
+        } else {
         const body = gravBody(shipState.pos);                 // corps gravitationnel dominant
         if (!body.home) learn("attlerock");
         const rel = shipState.pos.clone().sub(body.center);   // position relative au centre du corps
-        const upS = rel.clone().normalize();
-        const distS = rel.length();
+        upS = rel.clone().normalize();
+        distS = rel.length();
         // gravité radiale vers le corps (atténuée en altitude)
         const gShip = body.G * THREE.MathUtils.clamp(1 - (distS - body.R) / 120, 0.15, 1);
         shipState.vel.addScaledVector(upS, -gShip * dt);
         // sol réel sous le vaisseau (terrain sur Âtrebois, sphère lisse ailleurs) — EVO-2
-        const sGroundR = body.home ? groundR(upS) : body.R;
-        // axes locaux du vaisseau
-        const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(shipState.quat);
-        const rgt = new THREE.Vector3(1, 0, 0).applyQuaternion(shipState.quat);
-        const upL = new THREE.Vector3(0, 1, 0).applyQuaternion(shipState.quat);
+        sGroundR = body.home ? groundR(upS) : body.R;
         const thrust = new THREE.Vector3();
         if (keys["KeyW"] || keys["KeyZ"]) thrust.add(fwd);
         if (keys["KeyS"]) thrust.sub(fwd);
@@ -1822,7 +1918,7 @@ export default function TimberHearth() {
         if (keys["KeyA"] || keys["KeyQ"]) thrust.sub(rgt);
         if (keys["Space"]) thrust.add(upL);
         if (keys["ShiftLeft"]) thrust.sub(upL);
-        const thrusting = thrust.lengthSq() > 0 && res.fuel > 0;
+        thrusting = thrust.lengthSq() > 0 && res.fuel > 0;
         if (thrusting) {
           shipState.vel.addScaledVector(thrust.normalize(), CFG.SHIP_THRUST * dt);
           res.fuel = Math.max(0, res.fuel - CFG.FUEL_DRAIN * dt);
@@ -1838,7 +1934,6 @@ export default function TimberHearth() {
 
         // --- EVO-6 : pilote automatique vers l'astre verrouillé (variations auto de direction + vitesse) ---
         const lockBody = lockedRef.current ? bodyById[lockedRef.current] : null;
-        let autopilotActive = false;
         if (autoRef.current && lockBody && !shipState.landed && res.fuel > 0) {
           autopilotActive = true;
           const toB = lockBody.pos.clone().sub(shipState.pos);
@@ -1858,23 +1953,6 @@ export default function TimberHearth() {
           const lateral = relVel.clone().addScaledVector(dir, -closing);
           shipState.vel.addScaledVector(lateral, -Math.min(1, dt * 0.8)); // amortit la dérive perpendiculaire
           res.fuel = Math.max(0, res.fuel - CFG.FUEL_DRAIN * 0.8 * dt);
-        }
-
-        // --- Atterrissage assisté (maintien G) : auto-alignement + auto-freinage ---
-        const autoland = keys["KeyG"] && res.fuel > 0 && !shipState.landed;
-        let autolandActive = false;
-        if (autoland) {
-          autolandActive = true;
-          const altA = distS - (sGroundR + 2.2);               // hauteur au-dessus du point de poser (terrain réel)
-          const upright = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), upS);
-          shipState.quat.slerp(upright, Math.min(1, dt * 2.5));
-          const vUpComp = shipState.vel.dot(upS);
-          const vHoriz = shipState.vel.clone().sub(upS.clone().multiplyScalar(vUpComp));
-          shipState.vel.addScaledVector(vHoriz, -Math.min(1, dt * 3));
-          const targetDescent = -THREE.MathUtils.clamp(2 + altA * 0.25, 2, 18);
-          const dv = targetDescent - vUpComp;
-          shipState.vel.addScaledVector(upS, dv * Math.min(1, dt * 2.5));
-          res.fuel = Math.max(0, res.fuel - CFG.FUEL_DRAIN * 0.6 * dt);
         }
 
         // amortissement léger (stabilisateurs)
@@ -1901,6 +1979,7 @@ export default function TimberHearth() {
           // en vol, le vaisseau fournit l'O2 (pas de consommation pilote)
           res.o2 = Math.min(CFG.O2_MAX, res.o2 + CFG.O2_REFILL * 0.3 * dt);
         }
+        } // fin de la branche physique normale (≠ atterrissage spéculatif)
         // applique au mesh
         ship.position.copy(shipState.pos); ship.quaternion.copy(shipState.quat);
         flames.forEach((f) => { f.visible = thrusting || autolandActive || autopilotActive; f.scale.y = 0.8 + Math.random() * 0.5; });
@@ -2516,9 +2595,9 @@ export default function TimberHearth() {
           ⚠ CARBURANT ÉPUISÉ — dérive balistique
         </div>
       )}
-      {flying && started && (
+      {flying && started && !isTouch && (
         <div style={{ position: "absolute", bottom: 12, left: 16, fontSize: 12, color: "rgba(191,219,254,.85)", fontFamily: "monospace" }}>
-          ✈ PILOTAGE — ZQSD/WASD poussée · Espace/Maj haut/bas · Souris orientation · ←/→ roulis · <b>[G]</b> atterrissage assisté · <b>[T]</b> verrouiller · <b>[Y]</b> pilote auto · <b>[R]</b> sortir
+          ✈ PILOTAGE — ZQSD/WASD poussée · Espace/Maj haut/bas · Souris orientation · ←/→ roulis · <b>[G]</b> alunissage auto (astre verrouillé / proche) · <b>[T]</b> verrouiller · <b>[Y]</b> pilote auto · <b>[R]</b> sortir
         </div>
       )}
       {/* EVO-6 : message éphémère de verrouillage (~10 s) */}
@@ -2529,7 +2608,7 @@ export default function TimberHearth() {
       )}
       {flying && started && flyHud.auto && (
         <div style={{ position: "absolute", top: "40%", left: "50%", transform: "translateX(-50%)", fontFamily: "monospace", fontWeight: 700, fontSize: 15, color: "#34d399", textShadow: "0 0 8px rgba(0,0,0,.8)" }}>
-          ⤓ ATTERRISSAGE ASSISTÉ
+          ⤓ ALUNISSAGE AUTOMATIQUE
         </div>
       )}
       {flying && started && gauges.fuel <= 0 && (
@@ -2586,7 +2665,38 @@ export default function TimberHearth() {
           )}
         </>
       )}
-      {started && !dialog && !flying && <div style={{ position: "absolute", bottom: 12, left: 16, fontSize: 12, color: "rgba(226,232,240,.5)" }}>[F] sonde Scout · [C] Signalscope · [Tab] Journal de bord</div>}
+      {started && !dialog && !flying && !isTouch && <div style={{ position: "absolute", bottom: 12, left: 16, fontSize: 12, color: "rgba(226,232,240,.5)" }}>[F] sonde Scout · [C] Signalscope · [Tab] Journal de bord</div>}
+      {/* EVO-7 : commandes tactiles (uniquement sur écran tactile, hors menus/dialogues) */}
+      {isTouch && started && !dialog && !showLog && !showRemap && (
+        <>
+          <TouchLookZone api={touchApiRef} />
+          <TouchStick api={touchApiRef} />
+          <div style={{ position: "absolute", right: 14, bottom: 18, display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end", pointerEvents: "none" }}>
+            <div style={{ display: "flex", gap: 8 }}>
+              {flying ? (<>
+                <TouchBtn label="MONT" color="#7dd3fc" onDown={() => touchApiRef.current?.hold("Space", true)} onUp={() => touchApiRef.current?.hold("Space", false)} />
+                <TouchBtn label="DESC" color="#7dd3fc" onDown={() => touchApiRef.current?.hold("ShiftLeft", true)} onUp={() => touchApiRef.current?.hold("ShiftLeft", false)} />
+                <TouchBtn label="ALUN" color="#34d399" onDown={() => touchApiRef.current?.hold("KeyG", true)} onUp={() => touchApiRef.current?.hold("KeyG", false)} />
+              </>) : (<>
+                <TouchBtn label="SAUT" color="#7dd3fc" onDown={() => touchApiRef.current?.hold("Space", true)} onUp={() => touchApiRef.current?.hold("Space", false)} />
+                <TouchBtn label="COUR" color="#7dd3fc" onDown={() => touchApiRef.current?.hold("ShiftLeft", true)} onUp={() => touchApiRef.current?.hold("ShiftLeft", false)} />
+              </>)}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <TouchBtn label="E" color="#fcd34d" onDown={() => touchApiRef.current?.tap("interact")} />
+              {flying ? (<>
+                <TouchBtn label="T" color="#34d399" onDown={() => touchApiRef.current?.tap("lock")} />
+                <TouchBtn label="Y" color="#fbbf24" onDown={() => touchApiRef.current?.tap("auto")} />
+                <TouchBtn label="SORT" onDown={() => touchApiRef.current?.tap("exit")} />
+              </>) : (<>
+                <TouchBtn label="F" onDown={() => touchApiRef.current?.tap("scout")} />
+                <TouchBtn label="C" onDown={() => touchApiRef.current?.tap("scope")} />
+              </>)}
+              <TouchBtn label="≡" onDown={() => touchApiRef.current?.tap("log")} />
+            </div>
+          </div>
+        </>
+      )}
       {/* Signalscope : vignette + barre de force du signal */}
       {scope && (
         <div style={{ position: "absolute", inset: 0, pointerEvents: "none", boxShadow: "inset 0 0 200px 120px rgba(0,0,0,.85)", border: "2px solid rgba(125,211,252,.25)" }}>
