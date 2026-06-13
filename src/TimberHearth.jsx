@@ -407,6 +407,17 @@ function TouchToggle({ label, color, code, api }) {
   </div>;
 }
 
+// Bascule capteurs d'inclinaison du téléphone (gyroscope/boussole) — visée par inclinaison.
+function TiltToggle({ api }) {
+  const [on, setOn] = useState(false);
+  if (typeof window === "undefined" || !window.DeviceOrientationEvent) return null;
+  const c = "rgba(167,139,250,.65)";
+  return <div onTouchStart={(e) => { e.preventDefault(); e.stopPropagation(); const nv = !on; setOn(nv); api.current?.tilt(nv); }}
+    style={{ minWidth: 52, height: 44, padding: "0 8px", borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "monospace", fontSize: 11, fontWeight: 700, textAlign: "center", lineHeight: 1.05, color: on ? "#0b1220" : "#c4b5fd", background: on ? c : "rgba(8,20,32,.6)", border: `1px solid ${c}`, touchAction: "none", pointerEvents: "auto", userSelect: "none" }}>
+    AXE&nbsp;TÉL
+  </div>;
+}
+
 // ===================== EVO-5 — Remappage manette / joystick (menu « M ») =====================
 // Périphérique de référence : Thrustmaster T16000M (6 axes DSoF · 16 boutons · hat).
 // Les actions « maintien » injectent une touche clavier équivalente dans `keys` (le moteur ne change pas) ;
@@ -1417,6 +1428,7 @@ export default function TimberHearth() {
     const touchHold = {};                  // EVO-7 : touches maintenues par la couche tactile
     const touchMove = { x: 0, y: 0 };      // EVO-7 : sortie du pad de déplacement XY (-1..1)
     const touchLook = { x: 0, y: 0 };      // EVO-7 : sortie du pad de visée (-1..1), regard continu
+    const tiltLook = { x: 0, y: 0 };       // EVO-7 : sortie des capteurs d'inclinaison du téléphone (-1..1)
     let padAxisLook = { yaw: 0, pitch: 0, roll: 0 };
     let activeNpc = null;
     let dlgOpen = false;                 // flag SYNCHRONE (dialogRef est async via React)
@@ -1585,7 +1597,26 @@ export default function TimberHearth() {
         else if (id === "lock") { if (flyingRef.current) { if (lockedRef.current) { lockedRef.current = null; autoRef.current = false; } else if (candidateRef.current) lockedRef.current = candidateRef.current; } }
         else if (id === "auto") { if (flyingRef.current && lockedRef.current) autoRef.current = !autoRef.current; }
       },
+      tilt: async (on) => {                                   // EVO-7 : capteurs d'inclinaison (gyroscope/boussole)
+        tiltEnabled = !!on; tiltBase = null; tiltLook.x = 0; tiltLook.y = 0;
+        const DOE = window.DeviceOrientationEvent;
+        if (on && DOE && DOE.requestPermission) {
+          try { await DOE.requestPermission(); } catch (e) {}
+        }
+        return tiltEnabled;
+      },
     };
+    // EVO-7 : lecture des capteurs d'orientation du téléphone (inclinomètre) → axe de visée relatif à une calibration.
+    let tiltEnabled = false, tiltBase = null;
+    const onOrient = (e) => {
+      if (!tiltEnabled || e.beta == null || e.gamma == null) return;
+      if (!tiltBase) tiltBase = { beta: e.beta, gamma: e.gamma };  // position de repos capturée à l'activation
+      const dz = 4, span = 32;                                     // zone morte 4°, pleine échelle à 32° d'inclinaison
+      const f = (v) => { const s = Math.sign(v) * Math.max(0, Math.abs(v) - dz); return THREE.MathUtils.clamp(s / span, -1, 1); };
+      tiltLook.x = f(e.gamma - tiltBase.gamma); // inclinaison gauche/droite → lacet
+      tiltLook.y = f(e.beta - tiltBase.beta);   // inclinaison avant/arrière → tangage
+    };
+    window.addEventListener("deviceorientation", onOrient);
     const onClick = () => { if (dlgOpen || showLogRef.current) { startAudio(); return; } renderer.domElement.requestPointerLock(); startAudio(); };
     const dlgClick = () => { if (dlgOpen) advanceDialog(); };
     window.addEventListener("keydown", kd); window.addEventListener("keyup", ku);
@@ -1807,8 +1838,9 @@ export default function TimberHearth() {
       raf = requestAnimationFrame(animate);
       const dt = Math.min(clock.getDelta(), 0.05);
       updateInput(); // EVO-5 : fusionne clavier + manette (axes analogiques dans padAxisLook)
-      // EVO-7 : pad de visée tactile → regard continu (proportionnel, indépendant du framerate)
-      if ((touchLook.x || touchLook.y) && !dialogRef.current && !showLogRef.current && !showRemapRef.current) applyLook(touchLook.x * 760 * dt, touchLook.y * 760 * dt);
+      // EVO-7 : pad de visée tactile + capteurs d'inclinaison → regard continu (proportionnel, indépendant du framerate)
+      const lookX = touchLook.x + tiltLook.x, lookY = touchLook.y + tiltLook.y;
+      if ((lookX || lookY) && !dialogRef.current && !showLogRef.current && !showRemapRef.current) applyLook(lookX * 760 * dt, lookY * 760 * dt);
       loopTime += dt * (fastRef.current ? 10 : 1);
       const dur = CFG.LOOP, t = Math.min(loopTime, dur);
 
@@ -1886,6 +1918,8 @@ export default function TimberHearth() {
 
       // ===================== PILOTAGE DU VAISSEAU =====================
       if (flyingRef.current) {
+        // FIX : vider l'invite contextuelle (« Embarquer… ») figée — la branche à pied ne tourne pas en vol
+        if (hudRef.current.prompt) setHud((h) => ({ ...h, prompt: "" }));
         // axes locaux du vaisseau (utilisés partout : pilotage, caméra, flammes)
         const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(shipState.quat);
         const rgt = new THREE.Vector3(1, 0, 0).applyQuaternion(shipState.quat);
@@ -2461,6 +2495,7 @@ export default function TimberHearth() {
       cancelAnimationFrame(raf);
       window.removeEventListener("keydown", kd); window.removeEventListener("keyup", ku);
       window.removeEventListener("mousemove", onMouse); window.removeEventListener("click", dlgClick);
+      window.removeEventListener("deviceorientation", onOrient);
       window.removeEventListener("resize", onResize);
       renderer.domElement.removeEventListener("click", onClick);
       if (crackleT) clearTimeout(crackleT);
@@ -2710,12 +2745,14 @@ export default function TimberHearth() {
             {flying ? (<>
               <TouchBtn label="ALUN" color="#34d399" onDown={() => touchApiRef.current?.hold("KeyG", true)} onUp={() => touchApiRef.current?.hold("KeyG", false)} />
               <TouchBtn label="AUTO" color="#fbbf24" onDown={() => touchApiRef.current?.tap("auto")} />
+              <TiltToggle api={touchApiRef} />
               <TouchBtn label="SORT" onDown={() => touchApiRef.current?.tap("exit")} />
               <TouchBtn label="≡" onDown={() => touchApiRef.current?.tap("log")} />
             </>) : (<>
               <TouchBtn label="E" color="#fcd34d" onDown={() => touchApiRef.current?.tap("interact")} />
               <TouchBtn label="F" onDown={() => touchApiRef.current?.tap("scout")} />
               <TouchBtn label="C" onDown={() => touchApiRef.current?.tap("scope")} />
+              <TiltToggle api={touchApiRef} />
               <TouchBtn label="≡" onDown={() => touchApiRef.current?.tap("log")} />
             </>)}
           </div>

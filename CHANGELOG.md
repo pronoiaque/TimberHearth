@@ -4,6 +4,19 @@ Toutes les évolutions notables de ce projet sont consignées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/).
 
+## [0.7.2] — 2026-06-13
+
+### Ajouté
+- **EVO-7 — Visée par capteurs du téléphone** : bouton **« AXE TÉL »** (tactile) activant l'**inclinomètre**
+  (`DeviceOrientationEvent`, gyroscope/boussole) — incliner le téléphone gauche/droite pilote le **lacet**,
+  avant/arrière le **tangage** (relatif à une **calibration** prise à l'activation, zone morte 4°). Permission
+  iOS gérée (demandée au tap) ; se combine avec le pad **REGARDER**. Masqué si le capteur est absent.
+
+### Corrigé
+- **Invite contextuelle figée** : « Embarquer dans le vaisseau — [E] » (et autres `prompt`) restaient
+  affichés après l'action, car la branche qui les met à jour ne tourne qu'**à pied** ; l'invite est désormais
+  vidée dès le passage en mode vaisseau. (Bug présent de longue date.)
+
 ## [0.7.1] — 2026-06-13
 
 ### Modifié
