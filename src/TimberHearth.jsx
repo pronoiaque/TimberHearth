@@ -368,37 +368,41 @@ const terrainHeight = (n) => {
 const groundR = (n) => CFG.R + terrainHeight(n); // rayon du sol d'Âtrebois dans la direction unitaire n
 
 // ===================== EVO-7 — Couche tactile (smartphone / tablette) =====================
-// Pad de déplacement XY (joystick virtuel) — pilote KeyW/S/A/D via l'API impérative.
-function TouchStick({ api }) {
+// Pad joystick générique (deux exemplaires : DÉPLACER à gauche, REGARDER à droite).
+// onVec(x,y) reçoit un vecteur -1..1 ; le pad gauche pilote KeyW/S/A/D, le droit la visée continue.
+function TouchPad({ side, color, label, onVec, api }) {
   const ref = useRef(null), idRef = useRef(null);
   const [k, setK] = useState({ x: 0, y: 0 });
-  const RAD = 52;
-  const upd = (t) => { const el = ref.current; if (!el) return; const r = el.getBoundingClientRect(); let dx = t.clientX - (r.left + r.width / 2), dy = t.clientY - (r.top + r.height / 2); const len = Math.hypot(dx, dy) || 1; const cl = Math.min(len, RAD); dx = dx / len * cl; dy = dy / len * cl; setK({ x: dx, y: dy }); api.current?.move(dx / RAD, dy / RAD); };
+  const RAD = 54;
+  const upd = (t) => { const el = ref.current; if (!el) return; const r = el.getBoundingClientRect(); let dx = t.clientX - (r.left + r.width / 2), dy = t.clientY - (r.top + r.height / 2); const len = Math.hypot(dx, dy) || 1; const cl = Math.min(len, RAD); const nx = dx / len * cl, ny = dy / len * cl; setK({ x: nx, y: ny }); onVec(nx / RAD, ny / RAD); };
   const start = (e) => { e.preventDefault(); api.current?.start(); const t = e.changedTouches[0]; idRef.current = t.identifier; upd(t); };
   const move = (e) => { for (const t of e.changedTouches) if (t.identifier === idRef.current) upd(t); };
-  const end = (e) => { for (const t of e.changedTouches) if (t.identifier === idRef.current) { idRef.current = null; setK({ x: 0, y: 0 }); api.current?.move(0, 0); } };
+  const end = (e) => { for (const t of e.changedTouches) if (t.identifier === idRef.current) { idRef.current = null; setK({ x: 0, y: 0 }); onVec(0, 0); } };
+  const pos = side === "left" ? { left: 16 } : { right: 16 };
+  const c = color || "rgba(125,211,252,.4)";
   return (
     <div ref={ref} onTouchStart={start} onTouchMove={move} onTouchEnd={end} onTouchCancel={end}
-      style={{ position: "absolute", left: 18, bottom: 24, width: 124, height: 124, borderRadius: "50%", background: "rgba(125,211,252,.08)", border: "1px solid rgba(125,211,252,.35)", touchAction: "none", pointerEvents: "auto" }}>
-      <div style={{ position: "absolute", left: "50%", top: "50%", width: 50, height: 50, marginLeft: -25, marginTop: -25, borderRadius: "50%", background: "rgba(125,211,252,.35)", transform: `translate(${k.x}px,${k.y}px)` }} />
+      style={{ position: "absolute", bottom: 22, ...pos, width: 132, height: 132, borderRadius: "50%", background: "rgba(8,20,32,.28)", border: `1px solid ${c}`, touchAction: "none", pointerEvents: "auto" }}>
+      <div style={{ position: "absolute", left: "50%", top: "50%", width: 56, height: 56, marginLeft: -28, marginTop: -28, borderRadius: "50%", background: c, opacity: 0.45, transform: `translate(${k.x}px,${k.y}px)` }} />
+      <div style={{ position: "absolute", left: 0, right: 0, top: "50%", marginTop: -7, textAlign: "center", fontSize: 10, fontFamily: "monospace", color: "rgba(226,232,240,.45)", pointerEvents: "none" }}>{label}</div>
     </div>
   );
-}
-// Zone de visée (glissé du doigt) — applique le regard comme la souris.
-function TouchLookZone({ api }) {
-  const idRef = useRef(null), last = useRef({ x: 0, y: 0 });
-  const start = (e) => { api.current?.start(); const t = e.changedTouches[0]; idRef.current = t.identifier; last.current = { x: t.clientX, y: t.clientY }; };
-  const move = (e) => { for (const t of e.changedTouches) if (t.identifier === idRef.current) { const dx = t.clientX - last.current.x, dy = t.clientY - last.current.y; last.current = { x: t.clientX, y: t.clientY }; api.current?.look(dx * 1.3, dy * 1.3); } };
-  const end = (e) => { for (const t of e.changedTouches) if (t.identifier === idRef.current) idRef.current = null; };
-  return <div onTouchStart={start} onTouchMove={move} onTouchEnd={end} onTouchCancel={end}
-    style={{ position: "absolute", right: 0, top: 0, width: "55%", height: "100%", touchAction: "none", pointerEvents: "auto" }} />;
 }
 // Bouton tactile (impulsion via onDown, ou maintien via onDown/onUp).
 function TouchBtn({ label, color, onDown, onUp }) {
   return <div onTouchStart={(e) => { e.preventDefault(); e.stopPropagation(); onDown && onDown(); }}
     onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onUp && onUp(); }}
     onTouchCancel={() => onUp && onUp()}
-    style={{ minWidth: 50, height: 46, padding: "0 8px", borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: color || "#e2e8f0", background: "rgba(8,20,32,.6)", border: `1px solid ${color || "rgba(125,211,252,.4)"}`, touchAction: "none", pointerEvents: "auto", userSelect: "none" }}>
+    style={{ minWidth: 52, height: 44, padding: "0 10px", borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: color || "#e2e8f0", background: "rgba(8,20,32,.6)", border: `1px solid ${color || "rgba(125,211,252,.4)"}`, touchAction: "none", pointerEvents: "auto", userSelect: "none" }}>
+    {label}
+  </div>;
+}
+// Bouton bascule (ex. Courir) : conserve son état actif.
+function TouchToggle({ label, color, code, api }) {
+  const [on, setOn] = useState(false);
+  const c = color || "rgba(125,211,252,.4)";
+  return <div onTouchStart={(e) => { e.preventDefault(); e.stopPropagation(); const nv = !on; setOn(nv); api.current?.hold(code, nv); }}
+    style={{ minWidth: 52, height: 44, padding: "0 10px", borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: on ? "#0b1220" : (color || "#e2e8f0"), background: on ? c : "rgba(8,20,32,.6)", border: `1px solid ${c}`, touchAction: "none", pointerEvents: "auto", userSelect: "none" }}>
     {label}
   </div>;
 }
@@ -493,6 +497,7 @@ export default function TimberHearth() {
   const candidateRef = useRef(null); // astre actuellement au centre du réticule
   // EVO-7 : support écran tactile (smartphone / tablette)
   const [isTouch] = useState(() => typeof window !== "undefined" && (("ontouchstart" in window) || (navigator.maxTouchPoints || 0) > 0));
+  const isTouchRef = useRef(isTouch); isTouchRef.current = isTouch;
   const touchApiRef = useRef(null);  // API impérative pont rendu→moteur
   const overlayRef = useRef(null);          // fondu mort/supernova piloté en JS
   const hudRef = useRef(hud); hudRef.current = hud;
@@ -1411,6 +1416,7 @@ export default function TimberHearth() {
     const padEdgePrev = {};
     const touchHold = {};                  // EVO-7 : touches maintenues par la couche tactile
     const touchMove = { x: 0, y: 0 };      // EVO-7 : sortie du pad de déplacement XY (-1..1)
+    const touchLook = { x: 0, y: 0 };      // EVO-7 : sortie du pad de visée (-1..1), regard continu
     let padAxisLook = { yaw: 0, pitch: 0, roll: 0 };
     let activeNpc = null;
     let dlgOpen = false;                 // flag SYNCHRONE (dialogRef est async via React)
@@ -1567,6 +1573,7 @@ export default function TimberHearth() {
     touchApiRef.current = {
       start: () => startAudio(),
       look: (dx, dy) => applyLook(dx, dy),
+      look2: (x, y) => { touchLook.x = x; touchLook.y = y; },   // pad de visée → regard continu (consommé par frame)
       move: (x, y) => { touchMove.x = x; touchMove.y = y; },
       hold: (code, on) => { touchHold[code] = !!on; },
       tap: (id) => {
@@ -1800,6 +1807,8 @@ export default function TimberHearth() {
       raf = requestAnimationFrame(animate);
       const dt = Math.min(clock.getDelta(), 0.05);
       updateInput(); // EVO-5 : fusionne clavier + manette (axes analogiques dans padAxisLook)
+      // EVO-7 : pad de visée tactile → regard continu (proportionnel, indépendant du framerate)
+      if ((touchLook.x || touchLook.y) && !dialogRef.current && !showLogRef.current && !showRemapRef.current) applyLook(touchLook.x * 760 * dt, touchLook.y * 760 * dt);
       loopTime += dt * (fastRef.current ? 10 : 1);
       const dur = CFG.LOOP, t = Math.min(loopTime, dur);
 
@@ -2014,6 +2023,8 @@ export default function TimberHearth() {
           lkMsg = "Pour verrouiller « " + (cand.name || cand.id) + " » : appuie sur [T]"; lkUntil = now6 + 10000;
         }
         lkLastCand = cand ? cand.id : null;
+        // EVO-7 : sur tactile, garder l'invite de verrouillage tant qu'un astre est visé (pour pouvoir la taper)
+        if (isTouchRef.current && !lockedId && cand) { lkMsg = "Pour verrouiller « " + (cand.name || cand.id) + " » : appuie ici"; lkUntil = now6 + 1500; }
         if (lkMsg && now6 > lkUntil) lkMsg = null;
         if (lkMsg !== lkPushed) { lkPushed = lkMsg; setLockMsg(lkMsg); }
         // instrumentation de la cible verrouillée (distance + vitesse relatives, vecteur de dérive)
@@ -2589,7 +2600,14 @@ export default function TimberHearth() {
         Vitesse boucle : {fast ? "×10 (test)" : "×1"}
       </button>
       {!dialog && started && !showLog && <div style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%,-50%)", color: "rgba(255,255,255,.6)", fontSize: 20, pointerEvents: "none" }}>+</div>}
-      {hud.prompt && !dialog && <div style={{ position: "absolute", left: "50%", bottom: 112, transform: "translateX(-50%)", background: "rgba(0,0,0,.55)", color: "#fef3c7", padding: "8px 16px", borderRadius: 8, fontSize: 14 }}>{hud.prompt}</div>}
+      {hud.prompt && !dialog && (
+        <div
+          onTouchStart={isTouch ? (e) => { e.preventDefault(); e.stopPropagation(); touchApiRef.current?.hold("KeyE", true); touchApiRef.current?.tap("interact"); } : undefined}
+          onTouchEnd={isTouch ? (e) => { e.preventDefault(); e.stopPropagation(); touchApiRef.current?.hold("KeyE", false); } : undefined}
+          style={{ position: "absolute", left: "50%", bottom: isTouch ? 200 : 112, transform: "translateX(-50%)", background: isTouch ? "rgba(252,211,77,.18)" : "rgba(0,0,0,.55)", color: "#fef3c7", padding: isTouch ? "12px 20px" : "8px 16px", borderRadius: 10, fontSize: 14, border: isTouch ? "1px solid rgba(252,211,77,.6)" : "none", pointerEvents: isTouch ? "auto" : "none", touchAction: "none" }}>
+          {hud.prompt}{isTouch ? "  ▸" : ""}
+        </div>
+      )}
       {flying && started && gauges.fuel <= 0 && (
         <div style={{ position: "absolute", left: "50%", top: 96, transform: "translateX(-50%)", background: "rgba(60,10,10,.8)", color: "#fca5a5", padding: "6px 16px", borderRadius: 8, fontSize: 14, fontFamily: "monospace", pointerEvents: "none" }}>
           ⚠ CARBURANT ÉPUISÉ — dérive balistique
@@ -2600,12 +2618,18 @@ export default function TimberHearth() {
           ✈ PILOTAGE — ZQSD/WASD poussée · Espace/Maj haut/bas · Souris orientation · ←/→ roulis · <b>[G]</b> alunissage auto (astre verrouillé / proche) · <b>[T]</b> verrouiller · <b>[Y]</b> pilote auto · <b>[R]</b> sortir
         </div>
       )}
-      {/* EVO-6 : message éphémère de verrouillage (~10 s) */}
-      {flying && started && lockMsg && (
-        <div style={{ position: "absolute", top: "26%", left: "50%", transform: "translateX(-50%)", fontFamily: "monospace", fontSize: 14, color: "#fcd34d", background: "rgba(8,20,32,.6)", border: "1px solid rgba(251,191,36,.4)", borderRadius: 8, padding: "6px 14px", textShadow: "0 0 6px #000", pointerEvents: "none" }}>
-          {lockMsg}
-        </div>
-      )}
+      {/* EVO-6 : message éphémère de verrouillage (~10 s) — tappable sur tactile (verrouiller / pilote auto) */}
+      {flying && started && lockMsg && (() => {
+        const act = lockMsg.includes("verrouiller") ? "lock" : (lockMsg.includes("pilote auto") ? "auto" : null);
+        const tappable = isTouch && act;
+        return (
+          <div
+            onTouchStart={tappable ? (e) => { e.preventDefault(); e.stopPropagation(); touchApiRef.current?.tap(act); } : undefined}
+            style={{ position: "absolute", top: "26%", left: "50%", transform: "translateX(-50%)", fontFamily: "monospace", fontSize: 14, color: "#fcd34d", background: tappable ? "rgba(251,191,36,.18)" : "rgba(8,20,32,.6)", border: "1px solid rgba(251,191,36,.5)", borderRadius: 8, padding: tappable ? "10px 16px" : "6px 14px", textShadow: "0 0 6px #000", pointerEvents: tappable ? "auto" : "none", touchAction: "none" }}>
+            {lockMsg}{tappable ? "  ▸" : ""}
+          </div>
+        );
+      })()}
       {flying && started && flyHud.auto && (
         <div style={{ position: "absolute", top: "40%", left: "50%", transform: "translateX(-50%)", fontFamily: "monospace", fontWeight: 700, fontSize: 15, color: "#34d399", textShadow: "0 0 8px rgba(0,0,0,.8)" }}>
           ⤓ ALUNISSAGE AUTOMATIQUE
@@ -2666,34 +2690,34 @@ export default function TimberHearth() {
         </>
       )}
       {started && !dialog && !flying && !isTouch && <div style={{ position: "absolute", bottom: 12, left: 16, fontSize: 12, color: "rgba(226,232,240,.5)" }}>[F] sonde Scout · [C] Signalscope · [Tab] Journal de bord</div>}
-      {/* EVO-7 : commandes tactiles (uniquement sur écran tactile, hors menus/dialogues) */}
+      {/* EVO-7 : commandes tactiles — deux pads (DÉPLACER / REGARDER) + boutons au-dessus, hors menus/dialogues */}
       {isTouch && started && !dialog && !showLog && !showRemap && (
         <>
-          <TouchLookZone api={touchApiRef} />
-          <TouchStick api={touchApiRef} />
-          <div style={{ position: "absolute", right: 14, bottom: 18, display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end", pointerEvents: "none" }}>
-            <div style={{ display: "flex", gap: 8 }}>
-              {flying ? (<>
-                <TouchBtn label="MONT" color="#7dd3fc" onDown={() => touchApiRef.current?.hold("Space", true)} onUp={() => touchApiRef.current?.hold("Space", false)} />
-                <TouchBtn label="DESC" color="#7dd3fc" onDown={() => touchApiRef.current?.hold("ShiftLeft", true)} onUp={() => touchApiRef.current?.hold("ShiftLeft", false)} />
-                <TouchBtn label="ALUN" color="#34d399" onDown={() => touchApiRef.current?.hold("KeyG", true)} onUp={() => touchApiRef.current?.hold("KeyG", false)} />
-              </>) : (<>
-                <TouchBtn label="SAUT" color="#7dd3fc" onDown={() => touchApiRef.current?.hold("Space", true)} onUp={() => touchApiRef.current?.hold("Space", false)} />
-                <TouchBtn label="COUR" color="#7dd3fc" onDown={() => touchApiRef.current?.hold("ShiftLeft", true)} onUp={() => touchApiRef.current?.hold("ShiftLeft", false)} />
-              </>)}
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <TouchBtn label="E" color="#fcd34d" onDown={() => touchApiRef.current?.tap("interact")} />
-              {flying ? (<>
-                <TouchBtn label="T" color="#34d399" onDown={() => touchApiRef.current?.tap("lock")} />
-                <TouchBtn label="Y" color="#fbbf24" onDown={() => touchApiRef.current?.tap("auto")} />
-                <TouchBtn label="SORT" onDown={() => touchApiRef.current?.tap("exit")} />
-              </>) : (<>
-                <TouchBtn label="F" onDown={() => touchApiRef.current?.tap("scout")} />
-                <TouchBtn label="C" onDown={() => touchApiRef.current?.tap("scope")} />
-              </>)}
+          <TouchPad side="left" color="rgba(125,211,252,.45)" label="DÉPLACER" api={touchApiRef} onVec={(x, y) => touchApiRef.current?.move(x, y)} />
+          <TouchPad side="right" color="rgba(251,191,36,.5)" label="REGARDER" api={touchApiRef} onVec={(x, y) => touchApiRef.current?.look2(x, y)} />
+          {/* colonne gauche (au-dessus du pad de déplacement) : poussée verticale / saut */}
+          <div style={{ position: "absolute", left: 16, bottom: 168, display: "flex", flexDirection: "column", gap: 8, pointerEvents: "none" }}>
+            {flying ? (<>
+              <TouchBtn label="MONT" color="#7dd3fc" onDown={() => touchApiRef.current?.hold("Space", true)} onUp={() => touchApiRef.current?.hold("Space", false)} />
+              <TouchBtn label="DESC" color="#7dd3fc" onDown={() => touchApiRef.current?.hold("ShiftLeft", true)} onUp={() => touchApiRef.current?.hold("ShiftLeft", false)} />
+            </>) : (<>
+              <TouchBtn label="SAUT" color="#7dd3fc" onDown={() => touchApiRef.current?.hold("Space", true)} onUp={() => touchApiRef.current?.hold("Space", false)} />
+              <TouchToggle label="COUR" color="rgba(125,211,252,.5)" code="ShiftLeft" api={touchApiRef} />
+            </>)}
+          </div>
+          {/* colonne droite (au-dessus du pad de visée) : actions */}
+          <div style={{ position: "absolute", right: 16, bottom: 168, display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end", pointerEvents: "none" }}>
+            {flying ? (<>
+              <TouchBtn label="ALUN" color="#34d399" onDown={() => touchApiRef.current?.hold("KeyG", true)} onUp={() => touchApiRef.current?.hold("KeyG", false)} />
+              <TouchBtn label="AUTO" color="#fbbf24" onDown={() => touchApiRef.current?.tap("auto")} />
+              <TouchBtn label="SORT" onDown={() => touchApiRef.current?.tap("exit")} />
               <TouchBtn label="≡" onDown={() => touchApiRef.current?.tap("log")} />
-            </div>
+            </>) : (<>
+              <TouchBtn label="E" color="#fcd34d" onDown={() => touchApiRef.current?.tap("interact")} />
+              <TouchBtn label="F" onDown={() => touchApiRef.current?.tap("scout")} />
+              <TouchBtn label="C" onDown={() => touchApiRef.current?.tap("scope")} />
+              <TouchBtn label="≡" onDown={() => touchApiRef.current?.tap("log")} />
+            </>)}
           </div>
         </>
       )}

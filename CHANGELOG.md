@@ -4,6 +4,16 @@ Toutes les évolutions notables de ce projet sont consignées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/).
 
+## [0.7.1] — 2026-06-13
+
+### Modifié
+- **EVO-7 — Ergonomie tactile** : les boutons serrés (qui chevauchaient les jauges) laissent place à
+  **deux pads joystick visibles** — **DÉPLACER** (gauche : avant/arrière/latéraux) et **REGARDER**
+  (droite : visée continue haut/bas/gauche/droite, proportionnelle). Les **invites contextuelles** sont
+  désormais **tappables** : « Parler à … / Embarquer — [E] » déclenche l'interaction (maintien géré pour la
+  réparation), et « Pour verrouiller « l'Attlerock » » verrouille l'astre visé. Boutons restants regroupés
+  au-dessus des pads (Saut/Courir ou Monter/Descendre/Alunir, sonde, scope, auto, sortie, journal).
+
 ## [0.7.0] — 2026-06-13
 
 ### Ajouté
