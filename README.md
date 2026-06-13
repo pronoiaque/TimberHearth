@@ -93,6 +93,8 @@ sur GitHub Pages à chaque push sur `main`. Pour l'activer une première fois :
 > Le build Pages utilise la base `/TimberHearth/` (variable `GHPAGES=1`). Si le dépôt porte un autre nom,
 > ajuste la valeur dans `vite.config.js`. Le workflow génère aussi un `404.html` (fallback SPA).
 
+📖 **Guide pas à pas (activation, dépannage)** : [`docs/GITHUB_PAGES.md`](docs/GITHUB_PAGES.md)
+
 ## 🗂️ Structure
 
 ```
@@ -110,7 +112,8 @@ TimberHearth/
 │  ├─ check.mjs               Pipeline de validation (npm run check)
 │  └─ scope.cjs               Analyseur de portée (acorn)
 ├─ docs/
-│  └─ EVO_Atrebois_1-5.md     Plan d'évolutions (format générateur)
+│  ├─ EVO_Atrebois_1-5.md     Plan d'évolutions (format générateur)
+│  └─ GITHUB_PAGES.md         Guide de mise en ligne (Pages)
 ├─ CHANGELOG.md
 ├─ NOTICE.md                  Cadre Outer Wilds / assets
 └─ LICENSE                    MIT (code)
