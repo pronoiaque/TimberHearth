@@ -4,6 +4,20 @@ Toutes les évolutions notables de ce projet sont consignées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/).
 
+## [0.6.0] — 2026-06-13
+
+### Ajouté
+- **EVO-6 — Verrouillage d'astre & pilote automatique (mode vaisseau)** :
+  - **Lock-on** : quand un astre passe au centre du **réticule**, une invite éphémère (~10 s) s'affiche —
+    *« Pour verrouiller « l'Attlerock » : appuie sur [T] »*. La touche **`T`** verrouille / relâche la cible.
+  - **Réticule instrumenté** : autour du viseur, **distance** et **vitesse relative** à l'astre verrouillé en
+    **valeurs numériques**, plus un **vecteur-flèche** de dérive (vitesse relative projetée à l'écran),
+    **vert** si on se rapproche / **rouge** si on s'éloigne, avec indicateur radial ▲/▼ du taux de rapprochement.
+    Un **marqueur 🔒** suit l'astre à l'écran (nom + distance).
+  - **Pilote automatique** (touche **`Y`**, sur la cible verrouillée) : **automatise direction et vitesse** —
+    oriente le nez vers l'astre, accélère à l'approche puis **freine** à l'arrivée, et **annule la dérive
+    latérale** pour un cap d'interception propre.
+
 ## [0.5.0] — 2026-06-13
 
 ### Ajouté

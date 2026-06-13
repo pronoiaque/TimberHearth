@@ -439,6 +439,12 @@ export default function TimberHearth() {
   const listeningRef = useRef(null); listeningRef.current = listening;
   const padInfoRef = useRef(padInfo); padInfoRef.current = padInfo;
   const showRemapRef = useRef(showRemap); showRemapRef.current = showRemap;
+  // EVO-6 : verrouillage d'astre (lock-on) + pilote automatique (mode vaisseau)
+  const [flyTgt, setFlyTgt] = useState({ locked: false });   // instrumentation du réticule
+  const [lockMsg, setLockMsg] = useState(null);              // message éphémère (~10 s)
+  const lockedRef = useRef(null);    // id de l'astre verrouillé
+  const autoRef = useRef(false);     // pilote auto actif
+  const candidateRef = useRef(null); // astre actuellement au centre du réticule
   const overlayRef = useRef(null);          // fondu mort/supernova piloté en JS
   const hudRef = useRef(hud); hudRef.current = hud;
   const dialogRef = useRef(dialog); dialogRef.current = dialog;
@@ -544,7 +550,7 @@ export default function TimberHearth() {
     };
 
     // --- Âtrebois : corps "home" (fixe à l'origine) ---
-    const homeBody = registerBody({ id: "atrebois", center: ZERO.clone(), R: CFG.R, G: CFG.G, soi: null, home: true, hasShaft: true });
+    const homeBody = registerBody({ id: "atrebois", name: "Âtrebois", center: ZERO.clone(), R: CFG.R, G: CFG.G, soi: null, home: true, hasShaft: true });
 
     // --- L'Attlerock (lune) : orbite Âtrebois ---
     const MOON_R = 55, MOON_G = 16, MOON_SOI = 130;
@@ -561,7 +567,7 @@ export default function TimberHearth() {
     moonStation.position.set(0, MOON_R, 0); moon.add(moonStation);
     scene.add(moon);
     const moonBody = registerBody({
-      id: "attlerock", R: MOON_R, G: MOON_G, soi: MOON_SOI, group: moon, spin: 0.05,
+      id: "attlerock", name: "l'Attlerock", R: MOON_R, G: MOON_G, soi: MOON_SOI, group: moon, spin: 0.05,
       orbit: { parent: "atrebois", a: 1040, inc: 0.35, flat: 0.7, lift: 240, phase: 0, speed: 0.06 },
     });
     computeBodyPos(moonBody); moonBody.prevPos.copy(moonBody.pos); moon.position.copy(moonBody.pos);
@@ -1370,6 +1376,7 @@ export default function TimberHearth() {
     const exitShip = () => {
       shipState.flying = false;
       flyingRef.current = false; setFlying(false);
+      lockedRef.current = null; autoRef.current = false; // EVO-6 : on relâche le verrou en sortant
       // dépose le joueur juste à côté du vaisseau, sur la verticale locale
       const upS = shipState.pos.clone().normalize();
       player.pos.copy(shipState.pos).addScaledVector(upS, -1.5);
@@ -1422,6 +1429,12 @@ export default function TimberHearth() {
       if (e.code === "Tab") { e.preventDefault(); setShowLog((v) => !v); }
       if (e.code === "KeyL") toggleDebug();
       if (e.code === "KeyM") { setShowRemap((v) => !v); document.exitPointerLock(); } // EVO-5 : menu manette
+      // EVO-6 : verrouillage d'astre / pilote auto (mode vaisseau)
+      if (e.code === "KeyT" && flyingRef.current) {
+        if (lockedRef.current) { lockedRef.current = null; autoRef.current = false; }
+        else if (candidateRef.current) lockedRef.current = candidateRef.current;
+      }
+      if (e.code === "KeyY" && flyingRef.current && lockedRef.current) autoRef.current = !autoRef.current;
     };
     const ku = (e) => { kbd[e.code] = false; };
 
@@ -1497,6 +1510,9 @@ export default function TimberHearth() {
     renderer.domElement.addEventListener("click", onClick);
 
     let loopTime = 0, lastHud = 0, lastOccl = 0;
+    // EVO-6 : état du message éphémère de verrouillage + throttles HUD cible
+    let lkMsg = null, lkUntil = 0, lkLastCand = null, lkLastLocked = null, lkPushed = null, tgtPushedAt = 0;
+    const tgtRef = { locked: false };
     let fade = 0, dying = false;
     const resetLoop = () => {
       loopTime = 0;
@@ -1507,6 +1523,7 @@ export default function TimberHearth() {
       res.o2 = CFG.O2_MAX; res.fuel = CFG.FUEL_MAX;
       // si on pilotait : on ressort, vaisseau reposé sur le pad
       if (flyingRef.current) { flyingRef.current = false; setFlying(false); }
+      lockedRef.current = null; autoRef.current = false; // EVO-6 : reset du verrou à chaque boucle
       shipState.pos.copy(padNormal.clone().multiplyScalar(groundR(padNormal) + 2.2));
       shipState.vel.set(0, 0, 0);
       shipState.quat.setFromUnitVectors(new THREE.Vector3(0, 1, 0), padNormal);
@@ -1819,6 +1836,30 @@ export default function TimberHearth() {
         if (padAxisLook.roll)  shipState.quat.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -padAxisLook.roll * CFG.SHIP_ROLL * dt));
         if (padAxisLook.yaw || padAxisLook.pitch || padAxisLook.roll) shipState.quat.normalize();
 
+        // --- EVO-6 : pilote automatique vers l'astre verrouillé (variations auto de direction + vitesse) ---
+        const lockBody = lockedRef.current ? bodyById[lockedRef.current] : null;
+        let autopilotActive = false;
+        if (autoRef.current && lockBody && !shipState.landed && res.fuel > 0) {
+          autopilotActive = true;
+          const toB = lockBody.pos.clone().sub(shipState.pos);
+          const distB = Math.max(0, toB.length() - lockBody.R);
+          const dir = toB.clone().normalize();
+          // DIRECTION : oriente le nez du vaisseau vers l'astre (rotation progressive)
+          const curFwd = new THREE.Vector3(0, 0, -1).applyQuaternion(shipState.quat);
+          const qTo = new THREE.Quaternion().setFromUnitVectors(curFwd, dir);
+          shipState.quat.premultiply(new THREE.Quaternion().slerp(qTo, Math.min(1, dt * 2))).normalize();
+          // VITESSE : approche puis freinage (vitesse de rapprochement désirée ∝ distance), drift latéral annulé
+          const bodyVel = lockBody.pos.clone().sub(lockBody.prevPos).multiplyScalar(dt > 0 ? 1 / dt : 0);
+          const relVel = shipState.vel.clone().sub(bodyVel);
+          const closing = relVel.dot(dir);
+          const desired = THREE.MathUtils.clamp(distB * 0.35, 0, 55); // u/s vers l'astre (→0 à l'arrivée)
+          const dv = THREE.MathUtils.clamp(desired - closing, -CFG.SHIP_THRUST * dt, CFG.SHIP_THRUST * dt);
+          shipState.vel.addScaledVector(dir, dv);
+          const lateral = relVel.clone().addScaledVector(dir, -closing);
+          shipState.vel.addScaledVector(lateral, -Math.min(1, dt * 0.8)); // amortit la dérive perpendiculaire
+          res.fuel = Math.max(0, res.fuel - CFG.FUEL_DRAIN * 0.8 * dt);
+        }
+
         // --- Atterrissage assisté (maintien G) : auto-alignement + auto-freinage ---
         const autoland = keys["KeyG"] && res.fuel > 0 && !shipState.landed;
         let autolandActive = false;
@@ -1862,7 +1903,7 @@ export default function TimberHearth() {
         }
         // applique au mesh
         ship.position.copy(shipState.pos); ship.quaternion.copy(shipState.quat);
-        flames.forEach((f) => { f.visible = thrusting || autolandActive; f.scale.y = 0.8 + Math.random() * 0.5; });
+        flames.forEach((f) => { f.visible = thrusting || autolandActive || autopilotActive; f.scale.y = 0.8 + Math.random() * 0.5; });
         // caméra 3e personne rapprochée : derrière et au-dessus du vaisseau, regard vers l'avant
         const camOffset = fwd.clone().multiplyScalar(-9).add(upL.clone().multiplyScalar(3.5));
         const camTarget = shipState.pos.clone().add(camOffset);
@@ -1870,6 +1911,61 @@ export default function TimberHearth() {
         camera.up.copy(upL);
         camera.lookAt(shipState.pos.clone().addScaledVector(fwd, 12).addScaledVector(upL, 1));
         sky.position.copy(camera.position);
+
+        // ===================== EVO-6 : verrouillage d'astre + instrumentation du réticule =====================
+        camera.updateMatrixWorld();
+        const camDir = new THREE.Vector3(); camera.getWorldDirection(camDir);
+        const camRight = new THREE.Vector3().crossVectors(camDir, camera.up).normalize();
+        const camUp = new THREE.Vector3().crossVectors(camRight, camDir).normalize();
+        // astre le plus proche du centre du réticule (cône ~6°)
+        let cand = null, candDot = 0.9945;
+        for (const b of BODIES) {
+          const d = b.pos.clone().sub(camera.position); const L = d.length(); if (L < 1e-3) continue;
+          const dd = d.multiplyScalar(1 / L).dot(camDir);
+          if (dd > candDot) { candDot = dd; cand = b; }
+        }
+        candidateRef.current = cand ? cand.id : null;
+        const lockedId = lockedRef.current;
+        const now6 = performance.now();
+        // message éphémère (~10 s) : nouvelle cible visée, ou verrouillage acquis/relâché
+        if (lockedId !== lkLastLocked) {
+          lkMsg = lockedId ? "« " + (bodyById[lockedId]?.name || lockedId) + " » VERROUILLÉ · [Y] pilote auto · [T] relâcher" : null;
+          lkUntil = now6 + 10000; lkLastLocked = lockedId;
+        } else if (!lockedId && cand && cand.id !== lkLastCand) {
+          lkMsg = "Pour verrouiller « " + (cand.name || cand.id) + " » : appuie sur [T]"; lkUntil = now6 + 10000;
+        }
+        lkLastCand = cand ? cand.id : null;
+        if (lkMsg && now6 > lkUntil) lkMsg = null;
+        if (lkMsg !== lkPushed) { lkPushed = lkMsg; setLockMsg(lkMsg); }
+        // instrumentation de la cible verrouillée (distance + vitesse relatives, vecteur de dérive)
+        let tgt = { locked: false };
+        const lb = lockedId ? bodyById[lockedId] : null;
+        if (lb) {
+          const relPos = lb.pos.clone().sub(shipState.pos);
+          const dist = relPos.length() - lb.R;
+          const n = relPos.clone().normalize();
+          const bodyVel = lb.pos.clone().sub(lb.prevPos).multiplyScalar(dt > 0 ? 1 / dt : 0);
+          const relVel = shipState.vel.clone().sub(bodyVel);
+          const closing = relVel.dot(n);                 // + rapprochement / − éloignement
+          const proj = lb.pos.clone().project(camera);
+          const sr = relVel.dot(camRight), su = relVel.dot(camUp); // dérive latérale projetée écran
+          tgt = {
+            locked: true, name: lb.name || lockedId, auto: autoRef.current,
+            dist: Math.round(dist), closing: +closing.toFixed(1), relSpd: +relVel.length().toFixed(1),
+            mx: +((proj.x * 0.5 + 0.5) * 100).toFixed(1), my: +((-proj.y * 0.5 + 0.5) * 100).toFixed(1), inFront: proj.z < 1,
+            arrDeg: Math.round(Math.atan2(-su, sr) * 180 / Math.PI),
+            arrLen: Math.round(THREE.MathUtils.clamp(Math.hypot(sr, su) * 2.2, 0, 130)),
+            approaching: closing >= 0,
+          };
+        }
+        // pousse vers React (throttle : changements significatifs, max ~20 Hz)
+        const pv = tgtRef, ch =
+          pv.locked !== tgt.locked || pv.auto !== tgt.auto || pv.inFront !== tgt.inFront || pv.name !== tgt.name ||
+          Math.abs((pv.dist || 0) - (tgt.dist || 0)) >= 1 || Math.abs((pv.closing || 0) - (tgt.closing || 0)) >= 0.3 ||
+          Math.abs((pv.mx || 0) - (tgt.mx || 0)) >= 0.6 || Math.abs((pv.my || 0) - (tgt.my || 0)) >= 0.6 ||
+          Math.abs((pv.arrDeg || 0) - (tgt.arrDeg || 0)) >= 4 || Math.abs((pv.arrLen || 0) - (tgt.arrLen || 0)) >= 4 ||
+          pv.approaching !== tgt.approaching;
+        if (ch && now6 - tgtPushedAt > 50) { Object.assign(tgtRef, { locked: false, name: undefined, auto: undefined, dist: undefined, closing: undefined, relSpd: undefined, mx: undefined, my: undefined, inFront: undefined, arrDeg: undefined, arrLen: undefined, approaching: undefined }, tgt); tgtPushedAt = now6; setFlyTgt({ ...tgt }); }
         // pulsation de l'écran de bord selon carburant
         dashScreen.material.color.setHex(res.fuel > 20 ? 0x102838 : 0x381010);
         // valeurs HUD de vol (throttlées)
@@ -2422,7 +2518,13 @@ export default function TimberHearth() {
       )}
       {flying && started && (
         <div style={{ position: "absolute", bottom: 12, left: 16, fontSize: 12, color: "rgba(191,219,254,.85)", fontFamily: "monospace" }}>
-          ✈ PILOTAGE — ZQSD/WASD poussée · Espace/Maj haut/bas · Souris orientation · ←/→ roulis · <b>[G]</b> atterrissage assisté · <b>[R]</b> sortir
+          ✈ PILOTAGE — ZQSD/WASD poussée · Espace/Maj haut/bas · Souris orientation · ←/→ roulis · <b>[G]</b> atterrissage assisté · <b>[T]</b> verrouiller · <b>[Y]</b> pilote auto · <b>[R]</b> sortir
+        </div>
+      )}
+      {/* EVO-6 : message éphémère de verrouillage (~10 s) */}
+      {flying && started && lockMsg && (
+        <div style={{ position: "absolute", top: "26%", left: "50%", transform: "translateX(-50%)", fontFamily: "monospace", fontSize: 14, color: "#fcd34d", background: "rgba(8,20,32,.6)", border: "1px solid rgba(251,191,36,.4)", borderRadius: 8, padding: "6px 14px", textShadow: "0 0 6px #000", pointerEvents: "none" }}>
+          {lockMsg}
         </div>
       )}
       {flying && started && flyHud.auto && (
@@ -2453,6 +2555,34 @@ export default function TimberHearth() {
             <div style={{ position: "absolute", top: "32%", left: "50%", transform: "translateX(-50%)", fontFamily: "monospace", fontWeight: 700, fontSize: 18, color: "#fca5a5", textShadow: "0 0 8px rgba(0,0,0,.8)", animation: "thBlink .6s steps(2) infinite" }}>
               ⚠ APPROCHE RAPIDE — RALENTIR
             </div>
+          )}
+          {/* EVO-6 : instrumentation de l'astre verrouillé (distance/vitesse relatives + vecteur de dérive) */}
+          {flyTgt.locked && (
+            <>
+              {/* marqueur de l'astre (si devant la caméra) */}
+              {flyTgt.inFront && (
+                <div style={{ position: "absolute", left: `${flyTgt.mx}%`, top: `${flyTgt.my}%`, transform: "translate(-50%,-50%)", pointerEvents: "none" }}>
+                  <div style={{ width: 28, height: 28, border: `2px solid ${flyTgt.auto ? "#fbbf24" : "#34d399"}`, borderRadius: 4, boxShadow: "0 0 6px rgba(0,0,0,.6)" }} />
+                  <div style={{ position: "absolute", left: "50%", top: "100%", transform: "translateX(-50%)", whiteSpace: "nowrap", marginTop: 3, fontFamily: "monospace", fontSize: 11, color: flyTgt.auto ? "#fbbf24" : "#34d399", textShadow: "0 0 4px #000" }}>
+                    🔒 {flyTgt.name} · {flyTgt.dist} u{flyTgt.auto ? " · AUTO" : ""}
+                  </div>
+                </div>
+              )}
+              {/* lectures numériques (à droite du réticule) */}
+              <div style={{ position: "absolute", left: "calc(50% + 36px)", top: "50%", transform: "translateY(-50%)", fontFamily: "monospace", fontSize: 12, lineHeight: 1.5, textShadow: "0 0 4px #000", pointerEvents: "none" }}>
+                <div style={{ color: "#bfdbfe" }}>DIST <b>{flyTgt.dist}</b> u</div>
+                <div style={{ color: "#bfdbfe" }}>V.REL <b>{flyTgt.relSpd}</b> u/s</div>
+                <div style={{ color: flyTgt.approaching ? "#34d399" : "#f87171" }}>{flyTgt.approaching ? "▲ RAPPR" : "▼ ÉLOIGNE"} <b>{Math.abs(flyTgt.closing)}</b> u/s</div>
+              </div>
+              {/* flèche-vecteur de dérive (vitesse relative projetée écran ; vert = rapprochement, rouge = éloignement) */}
+              {flyTgt.arrLen > 6 && (
+                <div style={{ position: "absolute", left: "50%", top: "50%", width: 0, height: 0, pointerEvents: "none" }}>
+                  <div style={{ position: "absolute", height: 2, width: flyTgt.arrLen, background: flyTgt.approaching ? "#34d399" : "#f87171", transformOrigin: "0 50%", transform: `rotate(${flyTgt.arrDeg}deg)`, boxShadow: "0 0 4px #000" }}>
+                    <div style={{ position: "absolute", right: -1, top: -3, width: 0, height: 0, borderLeft: `8px solid ${flyTgt.approaching ? "#34d399" : "#f87171"}`, borderTop: "4px solid transparent", borderBottom: "4px solid transparent" }} />
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </>
       )}
