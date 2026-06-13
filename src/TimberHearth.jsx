@@ -13,6 +13,7 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js"; // EVO-8 : éclairage d'environnement PBR
 
 const CFG = {
   R: 400, G: 30, EYE: 1.4, WALK: 7, RUN: 13, JUMP: 11, INTERACT: 4.5,
@@ -247,23 +248,23 @@ class AssetManager {
 // ---- Hearthian procédural (CapsuleGeometry — OK en r178) --------------------
 function makeHearthian({ skin, eye, droop, cloth, height = 1.4 }) {
   const g = new THREE.Group(); const s = height / 1.4;
-  const skinM = new THREE.MeshStandardMaterial({ color: skin, roughness: 0.85 });
-  const clothM = new THREE.MeshStandardMaterial({ color: cloth, roughness: 0.9 });
-  const eyeM = new THREE.MeshStandardMaterial({ color: eye, emissive: eye, emissiveIntensity: 0.25, roughness: 0.3 });
-  const pupM = new THREE.MeshStandardMaterial({ color: 0x080808 });
+  const skinM = new THREE.MeshStandardMaterial({ color: skin, roughness: 0.78, metalness: 0.05 });
+  const clothM = new THREE.MeshStandardMaterial({ color: cloth, roughness: 0.88 });
+  const eyeM = new THREE.MeshStandardMaterial({ color: eye, emissive: eye, emissiveIntensity: 0.25, roughness: 0.18, metalness: 0.1 });
+  const pupM = new THREE.MeshStandardMaterial({ color: 0x080808, roughness: 0.2 });
 
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.22 * s, 0.35 * s, 4, 10), clothM);
+  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.22 * s, 0.35 * s, 6, 16), clothM);
   torso.position.y = 0.65 * s; g.add(torso);
-  const hip = new THREE.Mesh(new THREE.SphereGeometry(0.18 * s, 10, 8), clothM);
+  const hip = new THREE.Mesh(new THREE.SphereGeometry(0.18 * s, 16, 12), clothM);
   hip.position.y = 0.42 * s; g.add(hip);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.18 * s, 16, 12), skinM);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.18 * s, 28, 20), skinM);
   head.scale.set(1, 0.88, 0.95); head.position.y = 1.08 * s; g.add(head);
 
   const hy = 1.10 * s;
   for (const sx of [1, -1]) {
-    const e = new THREE.Mesh(new THREE.SphereGeometry(0.055 * s, 12, 8), eyeM); e.position.set(0.07 * s * sx, hy, 0.16 * s); g.add(e);
-    const p = new THREE.Mesh(new THREE.SphereGeometry(0.025 * s, 8, 6), pupM); p.position.set(0.07 * s * sx, hy, 0.19 * s); g.add(p);
-    const se = new THREE.Mesh(new THREE.SphereGeometry(0.028 * s, 8, 6), eyeM); se.position.set(0.17 * s * sx, hy - 0.02 * s, 0.08 * s); g.add(se);
+    const e = new THREE.Mesh(new THREE.SphereGeometry(0.055 * s, 18, 12), eyeM); e.position.set(0.07 * s * sx, hy, 0.16 * s); g.add(e);
+    const p = new THREE.Mesh(new THREE.SphereGeometry(0.025 * s, 12, 8), pupM); p.position.set(0.07 * s * sx, hy, 0.19 * s); g.add(p);
+    const se = new THREE.Mesh(new THREE.SphereGeometry(0.028 * s, 12, 8), eyeM); se.position.set(0.17 * s * sx, hy - 0.02 * s, 0.08 * s); g.add(se);
     const ear = new THREE.Mesh(new THREE.ConeGeometry(0.04 * s, 0.18 * s, 6), skinM);
     const droopA = THREE.MathUtils.lerp(-0.3, 0.8, droop);
     ear.position.set(0.2 * s * sx, 1.2 * s, -0.05 * s);
@@ -510,6 +511,7 @@ export default function TimberHearth() {
   const [isTouch] = useState(() => typeof window !== "undefined" && (("ontouchstart" in window) || (navigator.maxTouchPoints || 0) > 0));
   const isTouchRef = useRef(isTouch); isTouchRef.current = isTouch;
   const touchApiRef = useRef(null);  // API impérative pont rendu→moteur
+  const rootRef = useRef(null);      // conteneur racine (cible du plein écran)
   const overlayRef = useRef(null);          // fondu mort/supernova piloté en JS
   const hudRef = useRef(hud); hudRef.current = hud;
   const dialogRef = useRef(dialog); dialogRef.current = dialog;
@@ -560,11 +562,15 @@ export default function TimberHearth() {
     const occludables = []; // { obj, dir(unit) }
     const registerSurfaceObject = (obj, dirUnit) => { occludables.push({ obj, dir: dirUnit.clone().normalize() }); };
     scene.fog = new THREE.FogExp2(0x4466aa, 0.0009);
+    // EVO-8 : carte d'environnement (PMREM) → reflets PBR crédibles sur métaux/verre (vaisseau, tuyères, statue…)
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    if ("environmentIntensity" in scene) scene.environmentIntensity = 0.35; // subtil (scène extérieure)
     const camera = new THREE.PerspectiveCamera(70, W / H, 0.1, 6000);
 
     // Lumières — unités physiques (r155+) : intensités élevées + decay par défaut
     const sun = new THREE.DirectionalLight(0xfff4e0, 3.0);
-    sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
+    sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0004; // EVO-8 : ombres plus nettes
     sun.shadow.camera.near = 1; sun.shadow.camera.far = 800;
     Object.assign(sun.shadow.camera, { left: -120, right: 120, top: 120, bottom: -120 });
     scene.add(sun, sun.target);
@@ -825,7 +831,17 @@ export default function TimberHearth() {
     dashScreen.position.set(0, 0.92, 0.22); dashScreen.rotation.x = -0.4; interior.add(dashScreen);
     const dashGlow = new THREE.PointLight(0x40c0ff, 0.6, 3, 2); dashGlow.position.set(0, 1.0, 0.4); interior.add(dashGlow);
     ship.add(interior);
+    // EVO-8 : détails du vaisseau (cuivre/tôle) — purement visuel, empreinte de collision inchangée
+    const copperMat = new THREE.MeshStandardMaterial({ color: 0xb87333, metalness: 0.85, roughness: 0.35 });
+    const metalMat = new THREE.MeshStandardMaterial({ color: 0x8a8f96, metalness: 0.8, roughness: 0.42 });
+    for (const z of [0.9, -0.5]) { const ring = new THREE.Mesh(new THREE.TorusGeometry(1.62, 0.08, 10, 28), copperMat); ring.position.set(0, 0.2, z); ring.rotation.x = Math.PI / 2; ship.add(ring); } // cerclage de coque
+    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.0, 1.4), metalMat); fin.position.set(0, 1.75, -0.9); ship.add(fin); // aileron dorsal
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.4, 6), metalMat); mast.position.set(-1.0, 2.05, -0.6); ship.add(mast); // antenne
+    const shipDish = new THREE.Mesh(new THREE.SphereGeometry(0.32, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.5), metalMat); shipDish.position.set(-1.0, 2.75, -0.6); shipDish.rotation.x = Math.PI * 0.2; ship.add(shipDish); // parabole
+    for (const [sx, col] of [[1, 0x33ff66], [-1, 0xff3344]]) { const nl = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 8), new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 2.4 })); nl.position.set(sx * 3.0, 0.25, 0.1); ship.add(nl); } // feux de nav. (repère d'orientation)
+    for (const [fx, fz] of [[1.1, 1.1], [-1.1, 1.1], [1.1, -1.1], [-1.1, -1.1]]) { const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 0.9, 6), metalMat); leg.position.set(fx, -1.2, fz); leg.rotation.set(fz * 0.18, 0, -fx * 0.18); ship.add(leg); const pad = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 8), copperMat); pad.position.set(fx * 1.12, -1.62, fz * 1.12); ship.add(pad); } // pieds amortisseurs
     ship.scale.setScalar(0.9); ship.castShadow = true;
+    ship.traverse((o) => { if (o.isMesh) o.castShadow = true; }); // EVO-8 : toutes les pièces projettent une ombre
     scene.add(ship);
     // pose initiale : posé au sol dans une clairière près du village
     const padNormal = latLon(CFG.R, 87.5, -6).normalize();
@@ -1439,15 +1455,18 @@ export default function TimberHearth() {
       else setDialog({ name: activeNpc.ref.data.name, line: activeNpc.ref.data.lines[activeNpc.i], idx: activeNpc.i + 1, total: activeNpc.ref.data.lines.length });
     };
 
+    const clearTouchHold = () => { for (const c of SYNC_CODES) touchHold[c] = false; touchMove.x = 0; touchMove.y = 0; }; // EVO-7 : évite qu'une touche tactile maintenue (ex. COUR) reste active au changement de mode
     const enterShip = () => {
       shipState.flying = true; shipState.landed = false;
       flyingRef.current = true; setFlying(true);
+      clearTouchHold();
       learn("piloted_ship");
     };
     const exitShip = () => {
       shipState.flying = false;
       flyingRef.current = false; setFlying(false);
       lockedRef.current = null; autoRef.current = false; // EVO-6 : on relâche le verrou en sortant
+      clearTouchHold();
       // dépose le joueur juste à côté du vaisseau, sur la verticale locale
       const upS = shipState.pos.clone().normalize();
       player.pos.copy(shipState.pos).addScaledVector(upS, -1.5);
@@ -2546,15 +2565,30 @@ export default function TimberHearth() {
 
   const beginGame = () => {
     setStarted(true);
+    goFullscreen();   // EVO-7 : passe en plein écran (geste utilisateur requis ; ignoré si non supporté, ex. iPhone)
     playWake(); // réveil au feu de camp : battement de paupières
     // textes successifs
     setTimeout(() => setIntroText("Aujourd'hui, c'est ton premier vol solo."), 700);
     setTimeout(() => setIntroText("Outer Wilds Ventures — programme d'exploration"), 3200);
     setTimeout(() => setIntroText(null), 5600);
   };
+  // EVO-7 : plein écran navigateur (avec fallbacks vendeurs). À déclencher depuis un geste utilisateur.
+  const goFullscreen = () => {
+    const el = rootRef.current || (typeof document !== "undefined" ? document.documentElement : null);
+    if (!el || (typeof document !== "undefined" && document.fullscreenElement)) return;
+    const fn = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+    if (fn) { try { const p = fn.call(el); if (p && p.catch) p.catch(() => {}); } catch (e) {} }
+  };
+  const toggleFullscreen = () => {
+    if (typeof document === "undefined") return;
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      const ex = document.exitFullscreen || document.webkitExitFullscreen;
+      if (ex) { try { ex.call(document); } catch (e) {} }
+    } else goFullscreen();
+  };
 
   return (
-    <div style={{ position: "relative", width: "100%", height: "100vh", background: "#000", overflow: "hidden", userSelect: "none", fontFamily: "system-ui, sans-serif" }}>
+    <div ref={rootRef} style={{ position: "relative", width: "100%", height: "100vh", background: "#000", overflow: "hidden", userSelect: "none", fontFamily: "system-ui, sans-serif" }}>
       <div ref={mountRef} style={{ position: "absolute", inset: 0 }} />
       {/* Overlay de fondu (mort / supernova) — piloté en JS, opacité 0 par défaut */}
       <div ref={overlayRef} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0)", opacity: 0, pointerEvents: "none", transition: "none" }} />
@@ -2738,6 +2772,9 @@ export default function TimberHearth() {
         <>
           <TouchPad side="left" color="rgba(125,211,252,.45)" label="DÉPLACER" api={touchApiRef} onVec={(x, y) => touchApiRef.current?.move(x, y)} />
           <TouchPad side="right" color="rgba(251,191,36,.5)" label="REGARDER" api={touchApiRef} onVec={(x, y) => touchApiRef.current?.look2(x, y)} />
+          {/* bouton plein écran */}
+          <div onTouchStart={(e) => { e.preventDefault(); e.stopPropagation(); toggleFullscreen(); }}
+            style={{ position: "absolute", top: 92, right: 12, width: 40, height: 40, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, color: "#cbd5e1", background: "rgba(8,20,32,.55)", border: "1px solid rgba(125,211,252,.35)", pointerEvents: "auto", touchAction: "none" }}>⛶</div>
           {/* colonne gauche (au-dessus du pad de déplacement) : poussée verticale / saut */}
           <div style={{ position: "absolute", left: 16, bottom: 168, display: "flex", flexDirection: "column", gap: 8, pointerEvents: "none" }}>
             {flying ? (<>

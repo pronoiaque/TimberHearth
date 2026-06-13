@@ -4,6 +4,25 @@ Toutes les évolutions notables de ce projet sont consignées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/).
 
+## [0.8.0] — 2026-06-13
+
+### Ajouté
+- **EVO-8 — Qualité graphique** (reprise du backlog « refonte vaisseau / finesse ») :
+  - **Reflets d'environnement PBR** : carte `RoomEnvironment` via `PMREMGenerator` (`scene.environment`,
+    intensité 0.35) → métaux et verre crédibles (cockpit, tuyères, statue nomai…).
+  - **Ombres plus nettes** : carte d'ombre du soleil `1024 → 2048` + `bias` ajusté.
+  - **Vaisseau détaillé** : cerclage cuivre de coque, aileron dorsal, antenne + parabole, **feux de
+    navigation** (vert/rouge), 4 pieds amortisseurs — purement visuel, **empreinte de collision inchangée**.
+  - **PNJ affinés** : têtes/yeux/torses plus lisses (segments accrus), matériaux ajustés pour les gros plans.
+- **EVO-7 — Plein écran** : `requestFullscreen()` déclenché au démarrage (geste utilisateur) + bouton **⛶**
+  (tactile) pour basculer ; fallbacks vendeurs, ignoré si non supporté (ex. iPhone).
+
+### Corrigé
+- **Touches tactiles maintenues au changement de mode** : une commande maintenue (ex. **COUR**/`Maj`) restait
+  active à l'embarquement (poussée « descente » bloquée en vol) ; les maintiens tactiles sont désormais
+  réinitialisés à l'entrée et à la sortie du vaisseau. *(Rappel : en vol, les boutons à pied — Saut/Courir —
+  ne sont plus affichés, remplacés par Monter/Descendre/Alunir/Auto/Sortir.)*
+
 ## [0.7.3] — 2026-06-13
 
 ### Modifié
