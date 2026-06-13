@@ -4,6 +4,20 @@ Toutes les évolutions notables de ce projet sont consignées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/).
 
+## [0.5.0] — 2026-06-13
+
+### Ajouté
+- **EVO-5 — Manette / Joystick & équilibrage lunaire** :
+  - **Menu de remappage complet** (touche **`M`**) : prise en charge de la **Gamepad API** (axes + boutons),
+    pensé pour le **Thrustmaster T16000M** (6 axes · 16 boutons · hat). Chaque action (poussée, latéraux,
+    montée/descente, roulis, atterrissage assisté, interaction, sonde, Signalscope, journal) se mappe sur un
+    **bouton**, et le **tangage / lacet / roulis** sur des **axes analogiques** (pilotage proportionnel, zone morte).
+    Détection à chaud du périphérique, **mapping par défaut T16000M**, bouton de réinitialisation,
+    **persistance** en `localStorage`. Le clavier reste actif en parallèle (fusion clavier+manette par frame).
+  - **Carburant & poussée recalibrés** pour **atteindre l'Attlerock** : réservoir `100 → 160`, drain `1.0 → 0.7`,
+    poussée `55 → 95`, amortissement `0.4 → 0.22` (vitesse terminale ~22 → ~60 u/s). Le voyage vers la lune
+    est désormais réalisable sans tomber en panne sèche.
+
 ## [0.4.0] — 2026-06-13
 
 ### Ajouté

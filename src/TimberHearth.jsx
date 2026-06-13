@@ -17,9 +17,11 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 const CFG = {
   R: 400, G: 30, EYE: 1.4, WALK: 7, RUN: 13, JUMP: 11, INTERACT: 4.5,
   LOOP: 22 * 60, SUPERNOVA_WARN: 120,
-  SHIP_THRUST: 55, SHIP_ROLL: 1.6, SHIP_PITCHYAW: 1.1, SHIP_DAMP: 0.4,
+  // EVO-5 : poussée/amortissement recalibrés pour atteindre l'Attlerock (vitesse terminale ~60 u/s au lieu de ~22).
+  SHIP_THRUST: 95, SHIP_ROLL: 1.6, SHIP_PITCHYAW: 1.1, SHIP_DAMP: 0.22,
   O2_MAX: 100, O2_DRAIN: 0.4, O2_DRAIN_EVA: 0.8, O2_REFILL: 40,   // par seconde (mode easy)
-  FUEL_MAX: 100, FUEL_DRAIN: 1.0, FUEL_REFILL: 30,                 // par seconde (drain calibré pour le voyage lunaire)
+  // EVO-5 : réservoir agrandi + drain réduit → autonomie ~230 s de poussée continue (voyage lunaire confortable).
+  FUEL_MAX: 160, FUEL_DRAIN: 0.7, FUEL_REFILL: 40,                 // par seconde
 };
 
 // ---- Manifeste d'assets (chemins relatifs, self-host CC0) -------------------
@@ -355,6 +357,58 @@ const terrainHeight = (n) => {
 };
 const groundR = (n) => CFG.R + terrainHeight(n); // rayon du sol d'Âtrebois dans la direction unitaire n
 
+// ===================== EVO-5 — Remappage manette / joystick (menu « M ») =====================
+// Périphérique de référence : Thrustmaster T16000M (6 axes DSoF · 16 boutons · hat).
+// Les actions « maintien » injectent une touche clavier équivalente dans `keys` (le moteur ne change pas) ;
+// les actions « impulsion » déclenchent une fonction sur front montant ; les axes pilotent le vaisseau en analogique.
+const PAD_HOLD = [
+  { id: "fwd",   label: "Poussée avant",       code: "KeyW" },
+  { id: "back",  label: "Poussée arrière",     code: "KeyS" },
+  { id: "right", label: "Latéral droite",      code: "KeyD" },
+  { id: "left",  label: "Latéral gauche",      code: "KeyA" },
+  { id: "up",    label: "Monter / Sauter",     code: "Space" },
+  { id: "down",  label: "Descendre / Courir",  code: "ShiftLeft" },
+  { id: "rollL", label: "Roulis gauche",       code: "ArrowLeft" },
+  { id: "rollR", label: "Roulis droite",       code: "ArrowRight" },
+  { id: "autoland", label: "Atterrissage assisté", code: "KeyG" },
+];
+const PAD_EDGE = [
+  { id: "interact", label: "Interagir / Parler", code: "KeyE" },
+  { id: "exit",     label: "Sortir du vaisseau", code: "KeyR" },
+  { id: "scout",    label: "Lancer la sonde",    code: "KeyF" },
+  { id: "scope",    label: "Signalscope",        code: "KeyC" },
+  { id: "log",      label: "Journal de bord",    code: "Tab" },
+];
+const PAD_AXES = [
+  { id: "axPitch", label: "Tangage (axe)" },
+  { id: "axYaw",   label: "Lacet (axe)" },
+  { id: "axRoll",  label: "Roulis (axe)" },
+];
+const PAD_AXIS_IDS = new Set(PAD_AXES.map((a) => a.id));
+// Mapping par défaut typique du T16000M : manche X=lacet, Y=tangage, vrille=roulis, gâchette/boutons pour le reste.
+const DEFAULT_BINDS = {
+  axYaw: { axis: 0 }, axPitch: { axis: 1 }, axRoll: { axis: 2 },
+  fwd: { button: 0 }, back: { button: 1 }, up: { button: 2 }, down: { button: 3 },
+  right: { button: 5 }, left: { button: 4 }, rollL: { button: 6 }, rollR: { button: 7 },
+  autoland: { button: 8 }, interact: { button: 9 }, exit: { button: 10 },
+  scout: { button: 11 }, scope: { button: 12 }, log: { button: 13 },
+};
+const PADBINDS_KEY = "timberhearth_padbinds_v1";
+const loadBinds = () => {
+  let b = { ...DEFAULT_BINDS };
+  try { const raw = localStorage.getItem(PADBINDS_KEY); if (raw) b = { ...DEFAULT_BINDS, ...JSON.parse(raw) }; } catch (e) {}
+  return b;
+};
+const saveBinds = (b) => { try { localStorage.setItem(PADBINDS_KEY, JSON.stringify(b)); } catch (e) {} };
+const bindLabel = (b) => {
+  if (!b) return "—";
+  if (b.button != null) return "Bouton " + (b.button + 1);
+  if (b.axis != null) return "Axe " + (b.axis + 1) + (b.dir == null ? "" : b.dir > 0 ? " +" : " −");
+  return "—";
+};
+// Codes clavier fusionnés chaque frame (clavier OU manette) avant la lecture par le moteur.
+const SYNC_CODES = ["KeyW","KeyZ","KeyS","KeyD","KeyA","KeyQ","Space","ShiftLeft","ArrowLeft","ArrowRight","KeyG","KeyE","KeyF","KeyC","KeyR"];
+
 export default function TimberHearth() {
   const mountRef = useRef(null);
   const [started, setStarted] = useState(false);
@@ -376,6 +430,15 @@ export default function TimberHearth() {
   const [flyHud, setFlyHud] = useState({ alt: 0, spd: 0, vspd: 0, danger: false, auto: false });
   const [mini, setMini] = useState({ pLat: 90, pLon: 0, sLat: 0, sLon: 0, flying: false });
   const [repair, setRepair] = useState(null); // {active,pct} | null
+  // EVO-5 : remappage manette (menu « M »)
+  const [showRemap, setShowRemap] = useState(false);
+  const [padBinds, setPadBinds] = useState(loadBinds);
+  const [padInfo, setPadInfo] = useState({ connected: false, id: "" });
+  const [listening, setListening] = useState(null); // id d'action en cours de capture
+  const bindsRef = useRef(padBinds); bindsRef.current = padBinds;
+  const listeningRef = useRef(null); listeningRef.current = listening;
+  const padInfoRef = useRef(padInfo); padInfoRef.current = padInfo;
+  const showRemapRef = useRef(showRemap); showRemapRef.current = showRemap;
   const overlayRef = useRef(null);          // fondu mort/supernova piloté en JS
   const hudRef = useRef(hud); hudRef.current = hud;
   const dialogRef = useRef(dialog); dialogRef.current = dialog;
@@ -1283,8 +1346,13 @@ export default function TimberHearth() {
       ns.connect(lp); lp.connect(ng); ng.connect(masterGain); ns.start(now + 1.4);
     };
 
-    // Input
+    // Input — `keys` est la carte FUSIONNÉE (clavier OU manette) lue par le moteur ;
+    // `kbd` est l'état clavier brut, `padHold` l'état manette ; fusion chaque frame via updateInput().
     const keys = {};
+    const kbd = {};
+    const padHold = {};
+    const padEdgePrev = {};
+    let padAxisLook = { yaw: 0, pitch: 0, roll: 0 };
     let activeNpc = null;
     let dlgOpen = false;                 // flag SYNCHRONE (dialogRef est async via React)
     const advanceDialog = () => {
@@ -1346,15 +1414,69 @@ export default function TimberHearth() {
       if (near) { activeNpc = { ref: near, i: 0 }; dlgOpen = true; setDialog({ name: near.data.name, line: near.data.lines[0], idx: 1, total: near.data.lines.length }); learn("talked_" + near.data.id); document.exitPointerLock(); }
     };
     const kd = (e) => {
-      keys[e.code] = true;
+      kbd[e.code] = true;
       if (e.code === "KeyE") tryInteract();
       if (e.code === "KeyR" && flyingRef.current) exitShip();
       if (e.code === "KeyF" && !dlgOpen && !flyingRef.current) launchScout();
       if (e.code === "KeyC" && !dlgOpen && !flyingRef.current) { scopeOn = !scopeOn; setScope(scopeOn); }
       if (e.code === "Tab") { e.preventDefault(); setShowLog((v) => !v); }
       if (e.code === "KeyL") toggleDebug();
+      if (e.code === "KeyM") { setShowRemap((v) => !v); document.exitPointerLock(); } // EVO-5 : menu manette
     };
-    const ku = (e) => { keys[e.code] = false; };
+    const ku = (e) => { kbd[e.code] = false; };
+
+    // ---- EVO-5 : lecture manette + fusion clavier/manette (appelée en tête de frame) ----
+    const fireEdge = (id) => {
+      if (id === "interact") tryInteract();
+      else if (id === "exit") { if (flyingRef.current) exitShip(); }
+      else if (id === "scout") { if (!dlgOpen && !flyingRef.current) launchScout(); }
+      else if (id === "scope") { if (!dlgOpen && !flyingRef.current) { scopeOn = !scopeOn; setScope(scopeOn); } }
+      else if (id === "log") setShowLog((v) => !v);
+    };
+    const bindActive = (gp, b) => {
+      if (!b) return false;
+      if (b.button != null) { const btn = gp.buttons[b.button]; return !!(btn && btn.pressed); }
+      if (b.axis != null && b.dir != null) { const v = gp.axes[b.axis] ?? 0; return Math.sign(v) === b.dir && Math.abs(v) > 0.5; }
+      return false;
+    };
+    const axisVal = (gp, b) => {
+      if (!b || b.axis == null) return 0;
+      let v = gp.axes[b.axis] ?? 0;
+      if (Math.abs(v) < 0.12) return 0;            // zone morte
+      return b.inv ? -v : v;
+    };
+    const captureInput = (gp, id) => {
+      const isAxis = PAD_AXIS_IDS.has(id);
+      for (let i = 0; i < gp.buttons.length; i++) if (gp.buttons[i].pressed) return isAxis ? null : { button: i };
+      for (let i = 0; i < gp.axes.length; i++) { const v = gp.axes[i] ?? 0; if (Math.abs(v) > 0.6) return isAxis ? { axis: i } : { axis: i, dir: v > 0 ? 1 : -1 }; }
+      return null;
+    };
+    const applyBind = (id, binding) => {
+      const next = { ...bindsRef.current, [id]: binding };
+      bindsRef.current = next; saveBinds(next); setPadBinds(next);
+      listeningRef.current = null; setListening(null);
+    };
+    const updateInput = () => {
+      for (const c of SYNC_CODES) padHold[c] = false;
+      padAxisLook = { yaw: 0, pitch: 0, roll: 0 };
+      const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+      let gp = null;
+      for (const p of pads) { if (p && p.connected) { gp = p; break; } }
+      const info = gp ? { connected: true, id: gp.id } : { connected: false, id: "" };
+      if (info.connected !== padInfoRef.current.connected || info.id !== padInfoRef.current.id) { padInfoRef.current = info; setPadInfo(info); }
+      if (gp) {
+        const binds = bindsRef.current;
+        if (listeningRef.current) {
+          const cap = captureInput(gp, listeningRef.current);
+          if (cap) applyBind(listeningRef.current, cap);
+        } else {
+          for (const a of PAD_HOLD) if (bindActive(gp, binds[a.id])) padHold[a.code] = true;
+          for (const a of PAD_EDGE) { const now = bindActive(gp, binds[a.id]); if (now && !padEdgePrev[a.id]) fireEdge(a.id); padEdgePrev[a.id] = now; }
+          padAxisLook = { yaw: axisVal(gp, binds.axYaw), pitch: axisVal(gp, binds.axPitch), roll: axisVal(gp, binds.axRoll) };
+        }
+      }
+      for (const c of SYNC_CODES) keys[c] = !!(kbd[c] || padHold[c]);
+    };
     const onMouse = (e) => {
       if (document.pointerLockElement !== renderer.domElement) return;
       if (flyingRef.current) {
@@ -1584,6 +1706,7 @@ export default function TimberHearth() {
     const animate = () => {
       raf = requestAnimationFrame(animate);
       const dt = Math.min(clock.getDelta(), 0.05);
+      updateInput(); // EVO-5 : fusionne clavier + manette (axes analogiques dans padAxisLook)
       loopTime += dt * (fastRef.current ? 10 : 1);
       const dur = CFG.LOOP, t = Math.min(loopTime, dur);
 
@@ -1690,6 +1813,11 @@ export default function TimberHearth() {
         // roulis au clavier (flèches)
         if (keys["ArrowLeft"]) shipState.quat.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), CFG.SHIP_ROLL * dt));
         if (keys["ArrowRight"]) shipState.quat.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -CFG.SHIP_ROLL * dt));
+        // EVO-5 : pilotage analogique au joystick (tangage / lacet / roulis proportionnels)
+        if (padAxisLook.yaw)   shipState.quat.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -padAxisLook.yaw * CFG.SHIP_PITCHYAW * dt * 1.6));
+        if (padAxisLook.pitch) shipState.quat.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -padAxisLook.pitch * CFG.SHIP_PITCHYAW * dt * 1.6));
+        if (padAxisLook.roll)  shipState.quat.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -padAxisLook.roll * CFG.SHIP_ROLL * dt));
+        if (padAxisLook.yaw || padAxisLook.pitch || padAxisLook.roll) shipState.quat.normalize();
 
         // --- Atterrissage assisté (maintien G) : auto-alignement + auto-freinage ---
         const autoland = keys["KeyG"] && res.fuel > 0 && !shipState.landed;
@@ -1781,6 +1909,9 @@ export default function TimberHearth() {
         player.forward.sub(up.clone().multiplyScalar(player.forward.dot(up)));
         if (player.forward.lengthSq() < 1e-5) player.forward.set(1, 0, 0).sub(up.clone().multiplyScalar(up.x));
         player.forward.normalize();
+        // EVO-5 : visée au joystick à pied (lacet autour de la verticale locale, tangage borné)
+        if (padAxisLook.yaw) player.forward.applyQuaternion(new THREE.Quaternion().setFromAxisAngle(up, -padAxisLook.yaw * 2.4 * dt)).normalize();
+        if (padAxisLook.pitch) player.pitch = THREE.MathUtils.clamp(player.pitch - padAxisLook.pitch * 2.4 * dt, -1.4, 1.4);
         const right = new THREE.Vector3().crossVectors(player.forward, up).normalize();
         const wish = new THREE.Vector3();
         if (keys["KeyW"] || keys["KeyZ"]) wish.add(player.forward);
@@ -2397,12 +2528,59 @@ export default function TimberHearth() {
           </div>
         </div>
       )}
+      {/* EVO-5 — Menu de remappage manette / joystick (touche M) */}
+      {showRemap && (
+        <div style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%,-50%)", width: "min(640px,94vw)", maxHeight: "88vh", overflowY: "auto", background: "rgba(8,15,26,.96)", border: "1px solid rgba(80,140,200,.4)", borderRadius: 12, padding: 18, color: "#e2e8f0", fontFamily: "system-ui" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+            <div style={{ color: "#7dd3fc", fontWeight: 700, fontSize: 18 }}>Manette / Joystick — remappage</div>
+            <div style={{ fontSize: 12, color: "#64748b" }}>[M] fermer</div>
+          </div>
+          <div style={{ fontSize: 13, marginBottom: 10, color: padInfo.connected ? "#34d399" : "#f87171" }}>
+            {padInfo.connected ? "● Détecté : " + padInfo.id : "○ Aucune manette détectée — branche le périphérique puis appuie sur un bouton."}
+          </div>
+          <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 12 }}>
+            Clique « Régler » puis actionne le bouton ou l'axe voulu sur ta manette. (Axes pour Tangage/Lacet/Roulis ; boutons pour le reste.)
+          </div>
+          {[["Axes de pilotage", PAD_AXES], ["Poussée & vol (maintien)", PAD_HOLD], ["Actions (impulsion)", PAD_EDGE]].map(([title, list]) => (
+            <div key={title} style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 1, color: "#64748b", marginBottom: 4 }}>{title}</div>
+              {list.map((a) => {
+                const isListening = listening === a.id;
+                return (
+                  <div key={a.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "5px 8px", borderRadius: 6, background: isListening ? "rgba(245,158,11,.18)" : "rgba(255,255,255,.03)", marginBottom: 3 }}>
+                    <span style={{ fontSize: 14 }}>{a.label}{a.code ? <span style={{ color: "#475569", fontSize: 11 }}> · clavier {a.code.replace("Key", "").replace("Left", "")}</span> : null}</span>
+                    <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontFamily: "monospace", fontSize: 13, color: "#fcd34d", minWidth: 70, textAlign: "right" }}>
+                        {isListening ? "actionne…" : bindLabel(padBinds[a.id])}
+                      </span>
+                      <button onClick={() => { listeningRef.current = a.id; setListening(a.id); }}
+                        style={{ fontSize: 12, padding: "3px 10px", borderRadius: 6, border: "1px solid rgba(125,211,252,.4)", background: "rgba(125,211,252,.1)", color: "#e2e8f0", cursor: "pointer" }}>
+                        {isListening ? "…" : "Régler"}
+                      </button>
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+          <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+            <button onClick={() => { listeningRef.current = null; setListening(null); saveBinds({ ...DEFAULT_BINDS }); setPadBinds({ ...DEFAULT_BINDS }); }}
+              style={{ fontSize: 13, padding: "6px 14px", borderRadius: 6, border: "1px solid rgba(148,163,184,.4)", background: "transparent", color: "#cbd5e1", cursor: "pointer" }}>
+              Réinitialiser (défauts T16000M)
+            </button>
+            <button onClick={() => { setShowRemap(false); setListening(null); listeningRef.current = null; }}
+              style={{ fontSize: 13, padding: "6px 14px", borderRadius: 6, border: "none", background: "rgba(245,158,11,.9)", color: "#000", fontWeight: 600, cursor: "pointer" }}>
+              Fermer
+            </button>
+          </div>
+        </div>
+      )}
       {!started && (
         <div onClick={beginGame} style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: 24, cursor: "pointer", background: "linear-gradient(#0b1e26,#174e7d)" }}>
           <h1 style={{ color: "#fde68a", fontSize: 40, fontWeight: 700, margin: "0 0 8px", letterSpacing: 2 }}>ÂTREBOIS</h1>
           <p style={{ color: "#cbd5e1", margin: "0 0 4px" }}>Outer Wilds Ventures — premier vol solo</p>
           <p style={{ color: "#94a3b8", fontSize: 14, maxWidth: 420, margin: "0 0 24px" }}>Hommage non-commercial · three r178 / WebGL2. Planète sphérique à gravité radiale, villageois, boucle 22 min.</p>
-          <p style={{ color: "#cbd5e1", fontSize: 14, maxWidth: 460, margin: "0 0 24px" }}><b>ZQSD/WASD</b> bouger · <b>Souris</b> regarder · <b>Maj</b> courir · <b>Espace</b> sauter · <b>E</b> parler · <b>F</b> sonde Scout · <b>C</b> Signalscope · <b>Tab</b> journal · <b>L</b> debug</p>
+          <p style={{ color: "#cbd5e1", fontSize: 14, maxWidth: 460, margin: "0 0 24px" }}><b>ZQSD/WASD</b> bouger · <b>Souris</b> regarder · <b>Maj</b> courir · <b>Espace</b> sauter · <b>E</b> parler · <b>F</b> sonde Scout · <b>C</b> Signalscope · <b>Tab</b> journal · <b>M</b> manette/joystick · <b>L</b> debug</p>
           <div style={{ padding: "12px 24px", background: "rgba(245,158,11,.9)", color: "#000", fontWeight: 600, borderRadius: 8 }}>Cliquer pour démarrer (puis cliquer pour verrouiller la souris)</div>
         </div>
       )}
