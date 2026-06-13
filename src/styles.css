@@ -1,0 +1,4 @@
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body { background: #05060a; overflow: hidden; -webkit-user-select: none; user-select: none; }
+canvas { display: block; }
