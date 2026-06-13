@@ -4,6 +4,20 @@ Toutes les évolutions notables de ce projet sont consignées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/).
 
+## [0.9.0] — 2026-06-13
+
+### Ajouté
+- **EVO-9 — Refonte du vaisseau** (reprise du plan « Refonte du vaisseau » du roadmap) :
+  - **Coque tonneau** en `LatheGeometry` (profil ventru, bois lasuré) cerclée de **hoops cuivre**, nez orienté
+    vers l'avant (-Z).
+  - **Verrière en verre** (`MeshPhysicalMaterial` à transmission) avec cerclage cuivre — reflets/réfraction
+    via la carte d'environnement (EVO-8), intensité relevée à 0.5.
+  - **3 tuyères cuivre** (1 centrale + 2 latérales) avec **flammes additives** indexées sur la poussée.
+  - **4 pieds amortisseurs articulés** (rotule + jambe inclinée + patin), **aileron dorsal**, **antenne + parabole**.
+  - **Feux de navigation** bâbord rouge / tribord vert **clignotants** (repère d'orientation nocturne).
+  - **Intérieur** réaligné face à l'avant (siège, console, écran de bord conservé).
+  - Empreinte de **collision inchangée** (rayon 2.2) — refonte strictement visuelle.
+
 ## [0.8.0] — 2026-06-13
 
 ### Ajouté

@@ -565,7 +565,7 @@ export default function TimberHearth() {
     // EVO-8 : carte d'environnement (PMREM) → reflets PBR crédibles sur métaux/verre (vaisseau, tuyères, statue…)
     const pmrem = new THREE.PMREMGenerator(renderer);
     scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    if ("environmentIntensity" in scene) scene.environmentIntensity = 0.35; // subtil (scène extérieure)
+    if ("environmentIntensity" in scene) scene.environmentIntensity = 0.5; // EVO-9 : reflets PBR plus marqués (métaux/verre du vaisseau)
     const camera = new THREE.PerspectiveCamera(70, W / H, 0.1, 6000);
 
     // Lumières — unités physiques (r155+) : intensités élevées + decay par défaut
@@ -804,44 +804,58 @@ export default function TimberHearth() {
 
     // --- Vaisseau (world-space, pilotable) ---
     const ship = new THREE.Group();
-    ship.add(new THREE.Mesh(new THREE.BoxGeometry(3, 2.2, 3), new THREE.MeshStandardMaterial({ color: 0x8a4a28, roughness: 0.6, metalness: 0.3 })));
-    const cockpit = new THREE.Mesh(new THREE.SphereGeometry(1.2, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xc8a840, metalness: 0.4, roughness: 0.3, transparent: true, opacity: 0.85 }));
-    cockpit.position.set(0, 1.1, 1.2); ship.add(cockpit);
-    for (const sx of [1, -1]) { const arm = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.3, 0.4), new THREE.MeshStandardMaterial({ color: 0x6a4a2a })); arm.position.set(sx * 2.5, 0, 0); ship.add(arm); }
-    // tuyères + flammes arrière
-    const flameMat = new THREE.MeshBasicMaterial({ color: 0xff7722, transparent: true, opacity: 0.9 });
+    // ===== EVO-9 : refonte du vaisseau — coque tonneau (LatheGeometry), nez vitré, tuyères cuivre, pieds articulés =====
+    // Avant = -Z (le pilote regarde -Z) ; arrière/tuyères = +Z (côté caméra). Profite de scene.environment (reflets PBR).
+    const shipWoodMat = new THREE.MeshStandardMaterial({ color: 0x7a4a26, roughness: 0.72, metalness: 0.08, envMapIntensity: 0.8 });
+    const copperMat = new THREE.MeshStandardMaterial({ color: 0xb87333, metalness: 0.9, roughness: 0.3, envMapIntensity: 1.5 });
+    const steelMat = new THREE.MeshStandardMaterial({ color: 0x9aa0a6, metalness: 0.85, roughness: 0.38, envMapIntensity: 1.4 });
+    const glassMat = new THREE.MeshPhysicalMaterial({ color: 0xbfe6ff, metalness: 0, roughness: 0.05, transmission: 0.9, thickness: 0.6, ior: 1.45, transparent: true, opacity: 0.55, envMapIntensity: 1.6 });
+    // Coque : profil tonneau tourné autour de Y, basculé pour pointer le nez vers -Z.
+    const hullProfile = [[0.05, -1.75], [0.55, -1.62], [0.92, -1.05], [1.14, -0.25], [1.2, 0.45], [1.08, 1.05], [0.74, 1.5], [0.36, 1.74], [0.06, 1.84]].map(([r, y]) => new THREE.Vector2(r, y));
+    const hull = new THREE.Mesh(new THREE.LatheGeometry(hullProfile, 32), shipWoodMat);
+    hull.rotation.x = -Math.PI / 2; hull.position.set(0, 0.15, 0); ship.add(hull);
+    // Cerclage cuivre (look « tonneau »)
+    for (const [z, r] of [[-0.9, 1.0], [-0.1, 1.22], [0.7, 0.98]]) { const hoop = new THREE.Mesh(new THREE.TorusGeometry(r, 0.07, 12, 36), copperMat); hoop.position.set(0, 0.15, z); ship.add(hoop); }
+    // Verrière (bulle de verre) à l'avant
+    const canopy = new THREE.Mesh(new THREE.SphereGeometry(0.66, 28, 20), glassMat); canopy.position.set(0, 0.5, -1.05); ship.add(canopy);
+    const canopyRim = new THREE.Mesh(new THREE.TorusGeometry(0.6, 0.06, 10, 28), copperMat); canopyRim.position.set(0, 0.42, -0.75); canopyRim.rotation.x = Math.PI * 0.42; ship.add(canopyRim);
+    // Tuyères + flammes (arrière, +Z)
+    const flameMat = new THREE.MeshBasicMaterial({ color: 0xff8a33, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false });
     const flames = [];
-    for (const sx of [1, -1]) {
-      const noz = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 0.5, 8), new THREE.MeshStandardMaterial({ color: 0x444, metalness: 0.6 }));
-      noz.position.set(sx * 2.5, 0, -1.6); noz.rotation.x = Math.PI / 2; ship.add(noz);
-      const fl = new THREE.Mesh(new THREE.ConeGeometry(0.2, 1.4, 8), flameMat);
-      fl.position.set(sx * 2.5, 0, -2.4); fl.rotation.x = -Math.PI / 2; fl.visible = false; ship.add(fl); flames.push(fl);
+    const mkThruster = (x, y, z, sc) => {
+      const bell = new THREE.Mesh(new THREE.CylinderGeometry(0.34 * sc, 0.24 * sc, 0.6 * sc, 16), copperMat); bell.rotation.x = Math.PI / 2; bell.position.set(x, y, z); ship.add(bell);
+      const fl = new THREE.Mesh(new THREE.ConeGeometry(0.26 * sc, 1.7 * sc, 14), flameMat); fl.rotation.x = Math.PI / 2; fl.position.set(x, y, z + 1.0 * sc); fl.visible = false; ship.add(fl); flames.push(fl);
+    };
+    mkThruster(0, 0.12, 1.7, 1.25); mkThruster(0.82, 0.0, 1.45, 0.8); mkThruster(-0.82, 0.0, 1.45, 0.8);
+    // Pieds amortisseurs articulés (4)
+    for (const sx of [1, -1]) for (const sz of [1, -1]) {
+      const hipJ = new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 8), steelMat); hipJ.position.set(sx * 0.8, -0.6, sz * 0.7); ship.add(hipJ);
+      const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.06, 0.85, 8), steelMat); thigh.position.set(sx * 1.0, -0.95, sz * 0.9); thigh.rotation.set(sz * 0.42, 0, -sx * 0.5); ship.add(thigh);
+      const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.14, 0.12, 14), copperMat); foot.position.set(sx * 1.28, -1.32, sz * 1.12); ship.add(foot);
     }
-    const shipLight = new THREE.PointLight(0xfff0d0, 4, 8, 2); shipLight.position.set(0, 1.1, 1.2); ship.add(shipLight);
-    // --- Intérieur cockpit (visible en vue première personne) ---
+    // Aileron dorsal + antenne + parabole
+    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.9, 1.15), shipWoodMat); fin.position.set(0, 1.2, 0.7); ship.add(fin);
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.0, 6), steelMat); mast.position.set(0.55, 1.15, -0.2); ship.add(mast);
+    const shipDish = new THREE.Mesh(new THREE.SphereGeometry(0.26, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.5), steelMat); shipDish.position.set(0.55, 1.65, -0.2); shipDish.rotation.x = Math.PI * 0.25; ship.add(shipDish);
+    // Feux de navigation (bâbord rouge / tribord vert) — clignotent dans animate
+    const navLights = [];
+    for (const [x, col] of [[1.22, 0x33ff66], [-1.22, 0xff3344]]) { const m = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 8), new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 2.4, roughness: 0.3 })); m.position.set(x, 0.2, -0.1); ship.add(m); navLights.push(m); }
+    const shipLight = new THREE.PointLight(0xfff0d0, 3.2, 7, 2); shipLight.position.set(0, 0.5, -0.7); ship.add(shipLight);
+    // --- Intérieur cockpit (faiblement visible à travers la verrière) ---
     const interior = new THREE.Group();
-    const seat = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.25, 0.7), new THREE.MeshStandardMaterial({ color: 0x3a2a18, roughness: 0.9 }));
-    seat.position.set(0, 0.55, 1.0); interior.add(seat);
-    const seatback = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.8, 0.18), new THREE.MeshStandardMaterial({ color: 0x3a2a18, roughness: 0.9 }));
-    seatback.position.set(0, 0.95, 1.35); interior.add(seatback);
-    const console_ = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.5, 0.3), new THREE.MeshStandardMaterial({ color: 0x4a4038, roughness: 0.7, metalness: 0.3 }));
-    console_.position.set(0, 0.85, 0.35); console_.rotation.x = -0.4; interior.add(console_);
-    // écran de bord (PlaneGeometry émissif, sert d'ancrage visuel)
-    const dashScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.3), new THREE.MeshBasicMaterial({ color: 0x102838 }));
-    dashScreen.position.set(0, 0.92, 0.22); dashScreen.rotation.x = -0.4; interior.add(dashScreen);
-    const dashGlow = new THREE.PointLight(0x40c0ff, 0.6, 3, 2); dashGlow.position.set(0, 1.0, 0.4); interior.add(dashGlow);
+    const seat = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.22, 0.6), new THREE.MeshStandardMaterial({ color: 0x3a2a18, roughness: 0.9 }));
+    seat.position.set(0, 0.2, 0.3); interior.add(seat);
+    const seatback = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.7, 0.16), new THREE.MeshStandardMaterial({ color: 0x3a2a18, roughness: 0.9 }));
+    seatback.position.set(0, 0.55, 0.6); interior.add(seatback);
+    const console_ = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.42, 0.28), new THREE.MeshStandardMaterial({ color: 0x4a4038, roughness: 0.7, metalness: 0.35, envMapIntensity: 1.2 }));
+    console_.position.set(0, 0.42, -0.45); console_.rotation.x = 0.4; interior.add(console_);
+    const dashScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.26), new THREE.MeshBasicMaterial({ color: 0x102838 }));
+    dashScreen.position.set(0, 0.5, -0.55); dashScreen.rotation.x = 0.4; interior.add(dashScreen);
+    const dashGlow = new THREE.PointLight(0x40c0ff, 0.6, 3, 2); dashGlow.position.set(0, 0.55, -0.4); interior.add(dashGlow);
     ship.add(interior);
-    // EVO-8 : détails du vaisseau (cuivre/tôle) — purement visuel, empreinte de collision inchangée
-    const copperMat = new THREE.MeshStandardMaterial({ color: 0xb87333, metalness: 0.85, roughness: 0.35 });
-    const metalMat = new THREE.MeshStandardMaterial({ color: 0x8a8f96, metalness: 0.8, roughness: 0.42 });
-    for (const z of [0.9, -0.5]) { const ring = new THREE.Mesh(new THREE.TorusGeometry(1.62, 0.08, 10, 28), copperMat); ring.position.set(0, 0.2, z); ring.rotation.x = Math.PI / 2; ship.add(ring); } // cerclage de coque
-    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.0, 1.4), metalMat); fin.position.set(0, 1.75, -0.9); ship.add(fin); // aileron dorsal
-    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.4, 6), metalMat); mast.position.set(-1.0, 2.05, -0.6); ship.add(mast); // antenne
-    const shipDish = new THREE.Mesh(new THREE.SphereGeometry(0.32, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.5), metalMat); shipDish.position.set(-1.0, 2.75, -0.6); shipDish.rotation.x = Math.PI * 0.2; ship.add(shipDish); // parabole
-    for (const [sx, col] of [[1, 0x33ff66], [-1, 0xff3344]]) { const nl = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 8), new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 2.4 })); nl.position.set(sx * 3.0, 0.25, 0.1); ship.add(nl); } // feux de nav. (repère d'orientation)
-    for (const [fx, fz] of [[1.1, 1.1], [-1.1, 1.1], [1.1, -1.1], [-1.1, -1.1]]) { const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 0.9, 6), metalMat); leg.position.set(fx, -1.2, fz); leg.rotation.set(fz * 0.18, 0, -fx * 0.18); ship.add(leg); const pad = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 8), copperMat); pad.position.set(fx * 1.12, -1.62, fz * 1.12); ship.add(pad); } // pieds amortisseurs
-    ship.scale.setScalar(0.9); ship.castShadow = true;
-    ship.traverse((o) => { if (o.isMesh) o.castShadow = true; }); // EVO-8 : toutes les pièces projettent une ombre
+    ship.scale.setScalar(0.9);
+    ship.traverse((o) => { if (o.isMesh) o.castShadow = true; }); // ombres sur toutes les pièces…
+    canopy.castShadow = false; flames.forEach((f) => (f.castShadow = false)); // …sauf verre et flammes
     scene.add(ship);
     // pose initiale : posé au sol dans une clairière près du village
     const padNormal = latLon(CFG.R, 87.5, -6).normalize();
@@ -2053,6 +2067,8 @@ export default function TimberHearth() {
         // applique au mesh
         ship.position.copy(shipState.pos); ship.quaternion.copy(shipState.quat);
         flames.forEach((f) => { f.visible = thrusting || autolandActive || autopilotActive; f.scale.y = 0.8 + Math.random() * 0.5; });
+        // EVO-9 : feux de navigation clignotants (repère d'orientation nocturne)
+        { const b = (Math.sin(clock.elapsedTime * 5) > 0.3) ? 2.6 : 0.5; for (const n of navLights) n.material.emissiveIntensity = b; }
         // caméra 3e personne rapprochée : derrière et au-dessus du vaisseau, regard vers l'avant
         const camOffset = fwd.clone().multiplyScalar(-9).add(upL.clone().multiplyScalar(3.5));
         const camTarget = shipState.pos.clone().add(camOffset);
