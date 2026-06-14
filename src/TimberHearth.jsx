@@ -74,71 +74,88 @@ void main(){
   gl_FragColor=vec4(sky,1.0);
 }`;
 
+// EVO-11 : `lines` = saynètes animées (voir DialogueStage). npc = locuteur, hero = acteur, path = lieux + destination.
 const NPCS = [
   { id: "slate", name: "Slate", skin: 0x4f7e9a, eye: 0xc87830, droop: 0.4, cloth: 0x5c3d1e, lat: 87.5, lon: 3,
-    lines: ["Tiens, notre pilote ! De retour de ta nuit à la belle étoile.",
-      "J'ai recyclé le réservoir d'oxygène de secours en chambre de combustion. Ça n'a explosé qu'une fois. Bon, deux.",
-      "Va chercher les codes de lancement chez Hornfels, à l'observatoire."] },
+    lines: [
+      { npc: "🛠️", hero: "🧑‍🚀", path: ["🔥"], act: "look", react: "👋", label: "de retour au feu" },
+      { npc: "🛠️", hero: "🛠️", path: ["🫙", "🚀"], act: "enter", reward: "💥", react: "😅", label: "réservoir O₂ → moteur" },
+      { npc: "🛠️", hero: "🧑‍🚀", path: ["🔭"], act: "enter", reward: "🔑", react: "🙂", label: "codes chez Hornfels" }] },
   { id: "hornfels", name: "Hornfels", skin: 0x5585a0, eye: 0xe8c820, droop: 0.5, cloth: 0x8a7a60, lat: 84, lon: 25,
-    lines: ["Te voilà ! Les conditions sont idéales pour décoller.",
-      "Tu seras notre premier astronaute équipé de l'outil de traduction nomai.",
-      "Voici tes codes. La statue remontée des Profondeurs… ses yeux refusent de s'ouvrir."] },
+    lines: [
+      { npc: "🔭", hero: "🧑‍🚀", path: ["🚀"], act: "fly", reward: "🌙", react: "😀", label: "conditions idéales" },
+      { npc: "🔭", hero: "🧑‍🚀", path: ["🌀"], act: "look", reward: "💬", react: "🙂", label: "traducteur nomai" },
+      { npc: "🔭", hero: "🧑‍🚀", path: ["🗿"], act: "look", reward: "🔒", react: "😐", label: "statue aux yeux clos" }] },
   { id: "gossan", name: "Gossan", skin: 0x4a8a70, eye: 0xe85520, droop: 0.45, cloth: 0x6b7054, lat: 80, lon: -40,
-    lines: ["Salut, jeune éclos. Grand jour.",
-      "Tu as visité la Grotte Zéro-G ? L'apesanteur, c'est de la survie là-haut.",
-      "Si tu ne respectes pas le vide, il ne te respecte pas non plus. C'est moi qui le dis."] },
+    lines: [
+      { npc: "🧑‍🏫", hero: "🧑‍🚀", path: ["🔥"], act: "look", react: "👋", label: "grand jour" },
+      { npc: "🧑‍🏫", hero: "🧑‍🚀", path: ["🕳️"], act: "enter", reward: "🧘", react: "😮", label: "grotte zéro-G" },
+      { npc: "🧑‍🏫", hero: "🧑‍🚀", path: ["🌌"], act: "look", reward: "⚠️", react: "😌", label: "respecte le vide" }] },
   { id: "spinel", name: "Spinel", skin: 0x7080b0, eye: 0x60c0e0, droop: 0.15, cloth: 0x2a3060, lat: 82, lon: 70,
-    lines: ["La Lune Quantique était visible cette nuit. Et puis non.",
-      "Elle ne reste en place que tant qu'on l'observe. On regarde ailleurs et — pouf.",
-      "Trois ans que je la traque. L'univers a un sens de l'humour épouvantable."] },
+    lines: [
+      { npc: "🔭", hero: "🧑‍🚀", path: ["🌙"], act: "look", reward: "❓", react: "😦", label: "Lune Quantique" },
+      { npc: "🔭", hero: "🧑‍🚀", path: ["🌙"], act: "look", reward: "💨", react: "😩", label: "on cligne… pouf" },
+      { npc: "🔭", hero: "🔭", path: ["🌙"], act: "look", reward: "⏳", react: "😅", label: "trois ans de traque" }] },
   { id: "hal", name: "Hal", skin: 0x6098c0, eye: 0x70c050, droop: 0.1, cloth: 0x4a5568, lat: 84, lon: 34,
-    lines: ["L'outil de traduction ? C'est NOTRE projet — le tien et le mien. Bon, surtout le mien.",
-      "Les nomais écrivaient en spirales. Quand deux d'entre eux parlaient, leurs spirales s'entrelaçaient.",
-      "Si tu trouves de l'écriture nomai là-haut… reviens tout me raconter. Tout."] },
+    lines: [
+      { npc: "🌀", hero: "🧑‍🚀", path: ["🌀"], act: "look", reward: "💬", react: "😏", label: "notre traducteur" },
+      { npc: "🌀", hero: "🧑‍🚀", path: ["🌀"], act: "look", reward: "🔗", react: "🙂", label: "spirales entrelacées" },
+      { npc: "🌀", hero: "🧑‍🚀", path: ["🌙", "🌀"], act: "look", reward: "📖", react: "😀", label: "rapporte l'écriture !" }] },
   { id: "galena", name: "Galena", skin: 0x5078a0, eye: 0x80e080, droop: 0.1, cloth: 0x4a3540, lat: 83, lon: 20,
-    lines: ["Ces textes nomais sont extraordinaires. Chaque conversation entrelace les voix.",
-      "Trois mois que je suis ici et je ne lis toujours qu'une page par jour.",
-      "Tant de sens dans chaque courbe. C'était une langue, mais aussi une relation."] },
+    lines: [
+      { npc: "📜", hero: "📜", path: ["🌀"], act: "look", reward: "🔗", react: "😮", label: "voix entrelacées" },
+      { npc: "📜", hero: "📜", path: ["🌀"], act: "look", reward: "📖", react: "😌", label: "une page par jour" },
+      { npc: "📜", hero: "📜", path: ["🌀"], act: "look", reward: "❤️", react: "🙂", label: "langue & relation" }] },
   { id: "mica", name: "Mica", skin: 0x7ab0c8, eye: 0xc09060, droop: 0.2, cloth: 0xd95f1a, lat: 86, lon: 2,
-    lines: ["Salut ! Tu veux t'entraîner sur la maquette avant le grand saut ?",
-      "Le pilotage, c'est cent pour cent d'instinct et zéro pour cent de panique.",
-      "Enfin… c'est ce que je dis aux éclos. Entre nous, garde un œil sur le carburant."] },
+    lines: [
+      { npc: "🕹️", hero: "🧑‍🚀", path: ["🛸"], act: "look", reward: "🎮", react: "😀", label: "maquette d'entraînement" },
+      { npc: "🕹️", hero: "🧑‍🚀", path: ["🚀"], act: "fly", reward: "✨", react: "😎", label: "100% instinct" },
+      { npc: "🕹️", hero: "🧑‍🚀", path: ["🚀"], act: "fly", reward: "⛽", react: "😅", label: "surveille le carburant" }] },
   { id: "rutile", name: "Rutile", skin: 0x5a8890, eye: 0xf0a030, droop: 0.45, cloth: 0x3a4a6a, lat: 85, lon: -14,
-    lines: ["Systèmes nominaux. Carburant à cent pour cent. Train d'atterrissage fonctionnel.",
-      "J'ai vérifié chaque vaisseau que Slate a construit. À chaque fois, une surprise non documentée.",
-      "Cette fois : le réservoir d'oxygène de secours a été 'réaffecté'. Je n'ai pas posé de question."] },
+    lines: [
+      { npc: "🧰", hero: "🧰", path: ["🚀"], act: "look", reward: "✅", react: "🙂", label: "systèmes nominaux" },
+      { npc: "🧰", hero: "🧰", path: ["🚀"], act: "look", reward: "❓", react: "🤨", label: "surprise non documentée" },
+      { npc: "🧰", hero: "🧰", path: ["🫙"], act: "look", reward: "🤐", react: "😐", label: "réservoir « réaffecté »" }] },
   { id: "arkose", name: "Arkose", skin: 0x5090c8, eye: 0xb0d020, droop: 0.0, cloth: 0x3a6530, lat: 86, lon: 51, height: 1.25,
-    lines: ["Oh — salut. Je… regardais cette zone. Scientifiquement. À distance de sécurité.",
-      "Cette pierre que j'ai lancée a juste… disparu. Hornfels dit que c'est de la Matière Fantôme.",
-      "La clôture, c'est ma ligne de sécurité. Je RESTE derrière la ligne. (lance une autre pierre)"] },
+    lines: [
+      { npc: "🥽", hero: "🧑‍🚀", path: ["🚧"], act: "look", react: "😬", label: "à distance de sécurité" },
+      { npc: "🥽", hero: "🥽", path: ["🌫️"], act: "throw", reward: "💨", react: "😨", label: "Matière Fantôme" },
+      { npc: "🥽", hero: "🥽", path: ["🚧", "🌫️"], act: "throw", reward: "💨", react: "🙃", label: "(encore une pierre)" }] },
   { id: "tektite", name: "Tektite", skin: 0x3a5a72, eye: 0xe04020, droop: 0.35, cloth: 0x2a4030, lat: 76, lon: 34,
-    lines: ["Tu as vu cette chose ? Une Graine de Ronce Noire. Elle a déjà pris racine.",
-      "L'intérieur est plus grand que l'extérieur. La physique y est… fausse. Je n'aime pas ça.",
-      "(à voix basse) Tu entends ? On dirait un harmonica. Ne le dis pas à Gneiss."] },
+    lines: [
+      { npc: "😨", hero: "🧑‍🚀", path: ["🌑"], act: "look", reward: "🌱", react: "😟", label: "Graine de Ronce Noire" },
+      { npc: "😨", hero: "🧑‍🚀", path: ["🕳️"], act: "enter", reward: "⚠️", react: "😣", label: "plus grand dedans" },
+      { npc: "😨", hero: "🧑‍🚀", path: ["🌑"], act: "listen", reward: "🎶", react: "🤫", label: "un harmonica ?" }] },
   { id: "gneiss", name: "Gneiss", skin: 0x4a7a90, eye: 0xd0c050, droop: 0.4, cloth: 0x3d5030, lat: 87, lon: 10,
-    lines: ["Tu as vu le cratère au nord ? Une Graine de Ronce Noire y a pris racine.",
-      "Tektite veut la détruire tout de suite. Moi, je pense qu'il faut l'ÉTUDIER d'abord.",
-      "Un spécimen vivant si près de chez nous… et qui ferait de la musique ? Imagine l'article !"] },
+    lines: [
+      { npc: "🔬", hero: "🧑‍🚀", path: ["🏔️", "🌑"], act: "climb", reward: "🌱", react: "😮", label: "cratère au nord" },
+      { npc: "🔬", hero: "🔬", path: ["🌑"], act: "look", reward: "🔬", react: "🤔", label: "l'étudier d'abord" },
+      { npc: "🔬", hero: "🔬", path: ["🌑"], act: "listen", reward: "🎶", react: "🤩", label: "imagine l'article !" }] },
   { id: "marl", name: "Marl", skin: 0x6070a0, eye: 0xa0d080, droop: 0.75, cloth: 0x704030, lat: 87, lon: -12,
-    lines: ["Jour de lancement. À chaque fois, je viens ici et je regarde.",
-      "Tu lèves les yeux : c'est l'infini. Tu baisses les yeux : c'est la maison.",
-      "Je n'ai jamais rejoint le programme. Mais ça n'a jamais empêché personne d'essayer."] },
+    lines: [
+      { npc: "🧓", hero: "🧓", path: ["🔥"], act: "look", reward: "🚀", react: "🙂", label: "jour de lancement" },
+      { npc: "🧓", hero: "🧓", path: ["🌌"], act: "look", reward: "🏠", react: "😌", label: "l'infini / la maison" },
+      { npc: "🧓", hero: "🧑‍🚀", path: ["🚀"], act: "fly", reward: "✨", react: "😊", label: "essayer quand même" }] },
   { id: "tephra", name: "Tephra", skin: 0x487080, eye: 0xe0a840, droop: 0.5, cloth: 0x6a4520, lat: 84, lon: 14,
-    lines: ["Prêt pour le lancement ? J'ai vérifié les planches de la tour ce matin.",
-      "Cet arbre a mille ans. On l'a juste évidé et posé une fusée dessus.",
-      "Il a survécu à tout ce que la planète lui a envoyé. Il survivra bien à notre petit programme."] },
+    lines: [
+      { npc: "🌳", hero: "🌳", path: ["🗼"], act: "climb", reward: "✅", react: "🙂", label: "planches vérifiées" },
+      { npc: "🌳", hero: "🧑‍🚀", path: ["🌳"], act: "look", reward: "🚀", react: "😮", label: "arbre millénaire → fusée" },
+      { npc: "🌳", hero: "🧑‍🚀", path: ["🌳"], act: "look", reward: "💪", react: "🙂", label: "il survivra" }] },
   { id: "moraine", name: "Moraine", skin: 0x4a6880, eye: 0xc07030, droop: 0.5, cloth: 0x5a7050, lat: 86, lon: -22,
-    lines: ["Bonjour. (fixe sa ligne) Bonne journée pour ça.",
-      "Je pêche le quadrupède. Le poisson à quatre yeux. Comme chaque matin.",
-      "Les geysers sont plus bruyants ces temps-ci. Comme s'ils essayaient de dire quelque chose."] },
+    lines: [
+      { npc: "🎣", hero: "🎣", path: ["🌊"], act: "fish", reward: "🐟", react: "🙂", label: "bonne journée pour ça" },
+      { npc: "🎣", hero: "🎣", path: ["🌊"], act: "fish", reward: "🐟", react: "😌", label: "poisson à quatre yeux" },
+      { npc: "🎣", hero: "🧑‍🚀", path: ["🌋"], act: "listen", reward: "🔊", react: "🤔", label: "geysers bavards" }] },
   { id: "porphy", name: "Porphy", skin: 0x608898, eye: 0xd0c080, droop: 0.4, cloth: 0xd95f1a, lat: 88, lon: 42,
-    lines: ["Oh — éclos ! Jour de lancement. Tu es excité ? Tu devrais.",
-      "La propulsion de ton vaisseau vient des cristaux de gravité nomais.",
-      "On ignore comment ça marche exactement. Mais ça marche. La meilleure sorte d'ingénierie."] },
+    lines: [
+      { npc: "⚙️", hero: "🧑‍🚀", path: ["🔥"], act: "look", react: "😀", label: "jour de lancement !" },
+      { npc: "⚙️", hero: "⚙️", path: ["🚀"], act: "look", reward: "💎", react: "🙂", label: "cristaux de gravité" },
+      { npc: "⚙️", hero: "🧑‍🚀", path: ["🚀"], act: "fly", reward: "❓", react: "😄", label: "ça marche quand même" }] },
   { id: "tuff", name: "Tuff", skin: 0x4a6a58, eye: 0xd07030, droop: 0.3, cloth: 0x3d2510, lat: 71, lon: 118,
-    lines: ["(penché sur sa pioche) Oh, salut. Tu cherches la Grotte Zéro-G ?",
-      "C'est moi qui l'ai trouvée en creusant. Pile au centre de la planète, la gravité s'annule.",
-      "Gossan y entraîne les astronautes. Moi, je préfère le poids honnête de la roche."] },
+    lines: [
+      { npc: "⛏️", hero: "⛏️", path: ["🕳️"], act: "dig", reward: "🕳️", react: "🙂", label: "trouvée en creusant" },
+      { npc: "⛏️", hero: "🧑‍🚀", path: ["🕳️"], act: "enter", reward: "🧘", react: "😮", label: "centre = gravité nulle" },
+      { npc: "⛏️", hero: "⛏️", path: ["🪨"], act: "dig", reward: "🪨", react: "😌", label: "le poids de la roche" }] },
 ];
 
 // 'rumor' = visible en silhouette même non découvert (indice). Les autres n'apparaissent qu'une fois 'learn'.
@@ -424,6 +441,56 @@ const makeSoftDiscTex = () => {
   grd.addColorStop(0, "rgba(255,255,255,1)"); grd.addColorStop(0.4, "rgba(255,255,255,0.5)"); grd.addColorStop(1, "rgba(255,255,255,0)");
   g.fillStyle = grd; g.fillRect(0, 0, S, S); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 };
+
+// ===================== EVO-11 — Dialogues animés (saynètes pictographiques « in-path ») =====================
+// Un dialogue n'est plus du texte mais une scène jouée : le locuteur (fixe à gauche) « raconte » une mini-animation —
+// le héros traverse un chemin, agit sur un lieu (grimpe / entre / lance / creuse / pêche / écoute), disparaît,
+// puis la récompense apparaît et le héros réagit. Boucle ~6 s. Une légende courte (facultative) lève l'ambiguïté.
+// Forme d'une scène : { npc, hero, path:[…lieux, destination], act, reward, react, label }.
+function DialogueStage({ scene }) {
+  const heroRef = useRef(null), rewRef = useRef(null), reaRef = useRef(null), projRef = useRef(null);
+  const isText = !scene || typeof scene === "string" || !scene.path;
+  useEffect(() => {
+    if (isText) return;
+    let raf; const t0 = performance.now();
+    const startX = 18, destX = 68;
+    const rise = scene.act === "climb" || scene.act === "fly";
+    const peak = scene.act === "fly" ? 34 : 24;
+    const set = (el, x, y, s, o, extra = "") => { if (!el) return; el.style.left = x + "%"; el.style.top = y + "%"; el.style.opacity = o; el.style.transform = `translate(-50%,-50%) scale(${s})${extra}`; };
+    const loop = () => {
+      const T = ((performance.now() - t0) / 6200) % 1;
+      let hx, hy = 58, hs = 1, ho = 1, flip = " scaleX(-1)";
+      if (T < 0.10) { hx = startX; ho = T / 0.10; }
+      else if (T < 0.45) { const u = (T - 0.10) / 0.35; hx = startX + (destX - 8 - startX) * u; hy = 58 - Math.abs(Math.sin(u * Math.PI * 5)) * 4; }
+      else if (T < 0.62) { const u = (T - 0.45) / 0.17; hx = destX - 8; hy = rise ? 58 - u * peak : (scene.act === "dig" ? 58 + Math.sin(u * Math.PI * 3) * 4 : 58 - Math.sin(u * Math.PI) * 6); }
+      else if (T < 0.72) { const u = (T - 0.62) / 0.10; hx = destX - 8; hy = rise ? 58 - peak : 58; ho = 1 - u; hs = 1 - 0.4 * u; }
+      else { const u = Math.min(1, (T - 0.72) / 0.10); hx = destX + 9; hy = 56; ho = u; flip = ""; }
+      set(heroRef.current, hx, hy, hs, ho, flip);
+      if (scene.act === "throw") { let po = 0, px = destX - 8, py = 58; if (T > 0.45 && T < 0.62) { const u = (T - 0.45) / 0.17; po = 1; px = (destX - 8) + 8 * u; py = 58 - Math.sin(u * Math.PI) * 18; } set(projRef.current, px, py, 1, po); }
+      let ro = 0, rs = 0.2; if (T > 0.70) { const u = Math.min(1, (T - 0.70) / 0.12); ro = u; rs = 1.25 - 0.25 * Math.min(1, (T - 0.70) / 0.25); } set(rewRef.current, destX, rise ? 30 : 46, rs, ro);
+      let ao = 0; if (T > 0.86) ao = Math.min(1, (T - 0.86) / 0.07); set(reaRef.current, destX + 9, 42, 1, ao);
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [scene, isText]);
+  if (isText) return <div style={{ fontSize: 15, lineHeight: 1.55, whiteSpace: "pre-line", minHeight: 56, color: "#fef3c7" }}>{typeof scene === "string" ? scene : (scene && scene.caption) || ""}</div>;
+  const path = scene.path, dest = path[path.length - 1], wps = path.slice(0, -1);
+  return (
+    <div style={{ position: "relative", height: 138, marginTop: 2, overflow: "hidden" }}>
+      <div style={{ position: "absolute", left: 8, right: 8, bottom: 20, borderBottom: "2px dotted rgba(190,150,90,.4)" }} />
+      <div style={{ position: "absolute", left: "7%", top: "54%", transform: "translate(-50%,-50%)", fontSize: 40, filter: "drop-shadow(0 0 6px rgba(0,0,0,.5))" }}>{scene.npc || "🧑"}</div>
+      <div style={{ position: "absolute", left: "7%", top: "20%", transform: "translate(-50%,-50%)", fontSize: 16 }}>💬</div>
+      {wps.map((w, i) => <div key={i} style={{ position: "absolute", left: `${44 + i * 11}%`, top: "60%", transform: "translate(-50%,-50%)", fontSize: 26, opacity: .85 }}>{w}</div>)}
+      <div style={{ position: "absolute", left: "68%", top: "56%", transform: "translate(-50%,-50%)", fontSize: 46 }}>{dest}</div>
+      {scene.label && <div style={{ position: "absolute", left: "68%", top: "90%", transform: "translateX(-50%)", fontSize: 11, color: "#cbd5e1", whiteSpace: "nowrap", fontFamily: "system-ui" }}>{scene.label}</div>}
+      <div ref={heroRef} style={{ position: "absolute", fontSize: 30, willChange: "transform,opacity", zIndex: 2 }}>{scene.hero || "🧑‍🚀"}</div>
+      {scene.act === "throw" && <div ref={projRef} style={{ position: "absolute", fontSize: 18, opacity: 0 }}>🪨</div>}
+      {scene.reward && <div ref={rewRef} style={{ position: "absolute", fontSize: 30, opacity: 0, zIndex: 3 }}>{scene.reward}</div>}
+      {scene.react && <div ref={reaRef} style={{ position: "absolute", fontSize: 24, opacity: 0, zIndex: 3 }}>{scene.react}</div>}
+    </div>
+  );
+}
 
 // ===================== EVO-7 — Couche tactile (smartphone / tablette) =====================
 // Pad joystick générique (deux exemplaires : DÉPLACER à gauche, REGARDER à droite).
@@ -2907,8 +2974,8 @@ export default function TimberHearth() {
       {dialog && (
         <div style={{ position: "absolute", left: "50%", bottom: 40, transform: "translateX(-50%)", width: "min(680px,90vw)", background: "rgba(0,0,0,.8)", border: "1px solid rgba(180,120,40,.5)", borderRadius: 12, padding: 20, color: "#fffbeb" }}>
           <div style={{ color: "#fcd34d", fontWeight: 600, marginBottom: 4 }}>{dialog.name}</div>
-          <div style={{ lineHeight: 1.6, whiteSpace: "pre-line" }}>{dialog.line}</div>
-          <div style={{ marginTop: 12, fontSize: 12, color: "#94a3b8" }}>[E] ou clic pour continuer · {dialog.idx}/{dialog.total}</div>
+          <DialogueStage scene={dialog.line} />
+          <div style={{ marginTop: 8, fontSize: 12, color: "#94a3b8" }}>{isTouch ? "tape" : "[E] ou clic"} pour continuer · {dialog.idx}/{dialog.total}</div>
         </div>
       )}
       {/* Journal de bord (Ship Log) — connaissances persistées en localStorage */}

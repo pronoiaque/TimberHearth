@@ -4,6 +4,16 @@ Toutes les évolutions notables de ce projet sont consignées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/).
 
+## [0.11.0] — 2026-06-14
+
+### Changé
+- **EVO-11 — Dialogues animés (pictographiques)** : fin du texte pour les 16 protagonistes. Chaque réplique est
+  désormais une **saynète jouée** — le locuteur (fixe) « raconte » une mini-animation *in-path* : le héros traverse
+  un chemin, agit sur un lieu (**grimpe / entre / lance / creuse / pêche / écoute / regarde / vole**), disparaît de
+  l'autre côté, puis la **récompense apparaît** et le héros **réagit**. Boucle ~6 s, avec une légende courte pour
+  lever l'ambiguïté. Tous les dialogues PNJ ont été réécrits dans ce langage ; les panneaux d'information (statue,
+  poèmes, vitrines) restent textuels (carte de repli).
+
 ## [0.10.0] — 2026-06-14
 
 ### Ajouté
