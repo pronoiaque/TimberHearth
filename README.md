@@ -29,7 +29,11 @@ toujours par une supernova — puis tu rouvres les yeux au feu, ta mémoire (et 
 - **Planète sphérique complète** (gravité radiale, marche tout autour du globe) avec **relief analytique** :
   collines, vallées, cratères, et un **village niché dans une cuvette**. Collisions et mesh dérivent de la
   *même* fonction de hauteur → cohérence parfaite.
-- **Vol spatial 6DOF** avec atterrissage assisté, gestion **O₂ / carburant**, HUD de vol et caméra de suivi.
+- **Vol spatial 6DOF** avec gestion **O₂ / carburant**, HUD de vol et caméra de suivi. **Alunissage
+  automatique** (descente spéculative qui suit l'astre, même la lune en orbite).
+- **Verrouillage d'astre & pilote automatique** : vise un astre, **verrouille-le** (`T`), lis sa **distance /
+  vitesse relative** autour du réticule (valeurs + vecteur de dérive coloré), et laisse le **pilote auto** (`Y`)
+  faire l'interception (oriente, accélère, freine).
 - **Système multi-corps** générique : une **lune (l'Attlerock)** en orbite réelle ; ajouter un astre = une ligne.
 - **Le Puits sans fond** : un tunnel traversant menant à une **bulle d'apesanteur** au cœur de la planète.
 - **Boucle temporelle** : compte à rebours de 22 min, **soleil qui meurt visiblement** (géante rouge) sur la fin,
@@ -38,29 +42,53 @@ toujours par une supernova — puis tu rouvres les yeux au feu, ta mémoire (et 
   vue déportée (PIP), **Signalscope**.
 - **Bande-son 100 % procédurale** : timbre de corde pincée (**Karplus-Strong**), motif original spatialisé,
   **silence en haute altitude**.
-- **Minimap pseudo-sphère** facon carte d'OW, et **outil de debug intégré** (touche `L` → enregistrement TSV).
+- **Contrôles universels** : clavier **AZERTY/QWERTY**, **manette / joystick** (menu de remappage complet `M`,
+  pensé pour le Thrustmaster T16000M), et **écran tactile** (deux pads + boutons + invites tappables, visée par
+  **capteurs d'inclinaison** du téléphone, **plein écran**) — détecté automatiquement.
+- **Rendu soigné** : reflets PBR (carte d'environnement), ombres douces, **vaisseau détaillé** (coque tonneau en
+  bois cerclée de cuivre, verrière en verre, tuyères, pieds, feux de navigation clignotants).
+- **Minimap pseudo-sphère** façon carte d'OW, et **outil de debug intégré** (touche `L` → enregistrement TSV).
 - **Sans dépendance d'assets** : tout a un *fallback* procédural — `npm install` puis `npm run dev` suffisent.
 
 ## 🎮 Commandes
+
+### Clavier / souris
 
 | Action | Touche(s) |
 |---|---|
 | Se déplacer | `Z Q S D` / `W A S D` |
 | Sauter / jet d'apesanteur | `Espace` |
+| Courir | `Maj` |
+| Orientation | souris |
 | Interagir · avancer le dialogue | `E` ou clic |
 | Monter / descendre du vaisseau | `E` (près du vaisseau) / `R` |
 | Pilotage — poussée | `Z Q S D` / `W A S D` |
 | Pilotage — monter / descendre | `Espace` / `Maj` |
 | Pilotage — roulis | `←` / `→` |
-| Orientation | souris |
-| **Atterrissage assisté** | `G` |
+| **Alunissage automatique** (astre verrouillé / le plus proche) | `G` |
+| **Verrouiller l'astre visé** | `T` |
+| **Pilote automatique** (vers la cible verrouillée) | `Y` |
 | Sonde Scout (lancer / rappeler) | `F` |
 | Signalscope | `C` |
-| Journal d'enquête | `J` |
+| Journal d'enquête | `Tab` |
+| **Menu manette / joystick** (remappage) | `M` |
 | Debug (enregistrement TSV) | `L` |
 | Vitesse de boucle ×10 (test) | bouton en haut à droite |
 
-> Clavier **AZERTY** et **QWERTY** gérés (lecture de `event.code`). Joystick : voir *Roadmap* (gamepad prévu).
+> Clavier **AZERTY** et **QWERTY** gérés (lecture de `event.code`).
+
+### Manette / Joystick
+
+Branche la manette et appuie sur un bouton pour la faire détecter, puis ouvre le **menu de remappage** (`M`) :
+chaque action se mappe sur un **bouton**, le tangage / lacet / roulis sur des **axes analogiques**. Mapping par
+défaut pensé pour le **Thrustmaster T16000M** ; réglages **persistés** (localStorage). Le clavier reste actif en parallèle.
+
+### Tactile (smartphone / tablette)
+
+Détecté automatiquement. **Pad gauche** = déplacement, **pad droit** = visée (ou **capteurs d'inclinaison** du
+téléphone via le bouton *AXE TÉL*). Les **invites contextuelles sont tappables** (« Parler à… / Embarquer », « Pour
+verrouiller… »). Boutons d'action contextuels (Saut/Courir au sol ; Monter/Descendre/Alunir/Auto/Sortir en vol) et
+bouton **plein écran** ⛶.
 
 ## 🚀 Installation
 
@@ -139,16 +167,21 @@ découvertes : c'est en accumulant les indices d'une boucle à l'autre que l'his
 
 ## 🌱 Roadmap
 
-Voir [`docs/EVO_Atrebois_1-5.md`](docs/EVO_Atrebois_1-5.md) pour le détail. État actuel :
+Plan d'origine (format générateur) : [`docs/EVO_Atrebois_1-5.md`](docs/EVO_Atrebois_1-5.md).
+Historique détaillé : [`CHANGELOG.md`](CHANGELOG.md). État actuel :
 
 - ✅ **EVO-1** Réveil paupières + soleil mourant
 - ✅ **EVO-2** Terrain analytique (relief, cratères, cuvette du village)
 - ✅ **EVO-3** Bande-son procédurale (Karplus-Strong) + spatialisation
 - ✅ **EVO-4** Performance : instancing + occlusion planétaire
-- ⏳ **EVO-5** Modularisation + garde-fous `npm run check`
-- ⏳ **EVO-6** Refonte du vaisseau (modèle + détails évolutifs)
+- ✅ **EVO-5** Manette / joystick (remappage `M`) + équilibrage carburant lunaire + garde-fous `npm run check`
+- ✅ **EVO-6** Verrouillage d'astre + pilote automatique (réticule instrumenté)
+- ✅ **EVO-7** Support tactile (deux pads, invites tappables, capteurs d'inclinaison, plein écran)
+- ✅ **EVO-8** Qualité graphique (reflets PBR, ombres, détails)
+- ✅ **EVO-9** Refonte du vaisseau (coque tonneau, verrière, tuyères, pieds, feux de nav.)
 
-Backlog : PNJ animés sur la boucle · vue cockpit interne · **manette / joystick** · 2ᵉ planète · contenu lore additionnel.
+Backlog : modularisation du fichier moteur · PNJ animés sur la boucle · vrai cockpit en vue première personne ·
+2ᵉ planète · contenu lore additionnel.
 
 ## 🙏 Crédits & remerciements
 

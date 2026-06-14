@@ -242,7 +242,7 @@ Récepteur Warp / fresque / intérieur de la Graine (contenu lore).
 ---
 
 # EVO-6 — Refonte du vaisseau (modèle + détails évolutifs)
-**Impact : identité visuelle forte · Effort : moyen · Risque : faible · Statut : ⏳ à faire**
+**Impact : identité visuelle forte · Effort : moyen · Risque : faible · Statut : ✅ implémenté (livré en EVO-9 — voir CHANGELOG)**
 
 ## Objectif
 Remplacer le module « boîte + cockpit » par un vaisseau crédible façon bricolage de bois et de tôle,
@@ -272,3 +272,22 @@ avec des détails qui prennent du sens au fil des EVO (les éléments décoratif
 ## Critères d'acceptation
 - Aucun changement de comportement physique (autoland, collisions, E identiques).
 - Poussée visible (flamme + lumière) ; feux clignotants la nuit ; silhouette reconnaissable de loin.
+
+---
+
+# Addendum — numérotation réelle des EVO livrées
+
+Ce document était le **plan initial** (EVO-1 → EVO-6). Les EVO réellement livrées ont **divergé** de ce plan
+après EVO-4 (priorités d'usage). Numérotation effective (détail dans [`../CHANGELOG.md`](../CHANGELOG.md)) :
+
+| EVO livrée | Contenu | Correspondance plan |
+|---|---|---|
+| EVO-1 → EVO-4 | Paupières/soleil · terrain · son · perfs | ✅ identiques au plan |
+| **EVO-5** | Manette/joystick (remappage `M`) + équilibrage carburant lunaire | intègre les garde-fous `npm run check` (plan EVO-5) |
+| **EVO-6** | Verrouillage d'astre + pilote automatique (réticule instrumenté) | nouveau (hors plan) |
+| **EVO-7** | Support tactile (2 pads, invites tappables, capteurs d'inclinaison, plein écran) | nouveau (hors plan) |
+| **EVO-8** | Qualité graphique (reflets PBR, ombres, détails) | nouveau (hors plan) |
+| **EVO-9** | Refonte du vaisseau (coque tonneau, verrière, tuyères, pieds, feux) | = plan « EVO-6 » ci-dessus |
+
+**Reste à faire** (plan EVO-5) : **modularisation** du fichier moteur unique. Backlog : PNJ animés sur la boucle ·
+vrai cockpit en vue première personne · 2ᵉ planète · contenu lore additionnel.
