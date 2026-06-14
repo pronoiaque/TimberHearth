@@ -4,6 +4,21 @@ Toutes les évolutions notables de ce projet sont consignées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
 versionnage [SemVer](https://semver.org/lang/fr/).
 
+## [0.10.0] — 2026-06-14
+
+### Ajouté
+- **EVO-10 — Textures procédurales HD déterministes** (PRNG semé, rendu stable) liées à la nature des objets :
+  **herbe** (sol), **écorce verticale** (troncs d'arbres + tour de lancement), **rondins horizontaux** (murs des
+  maisons), **pierre mouchetée** (rochers, cheminées, stèles), **feuillage** (cônes des arbres), **disque doux**
+  (Matière Fantôme) et **fumée** animée au-dessus du feu de camp.
+
+### Corrigé
+- **Atterrissage sur la Lune à grande vitesse** : la collision testait la position *après* intégration → on
+  **traversait** l'astre en une frame. Remplacée par une **collision balayée** (segment p0→pos) : plus de
+  traversée, on se pose côté impact.
+- **Boutons tactiles manquants en paysage** (ex. *Alunissage*) : la colonne de 5 boutons débordait hors de
+  l'écran ; réorganisée en **grille 2 colonnes compacte** ancrée en bas — tout reste visible en paysage.
+
 ## [0.9.0] — 2026-06-13
 
 ### Ajouté

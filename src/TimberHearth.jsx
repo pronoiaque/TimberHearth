@@ -368,6 +368,63 @@ const terrainHeight = (n) => {
 };
 const groundR = (n) => CFG.R + terrainHeight(n); // rayon du sol d'Âtrebois dans la direction unitaire n
 
+// ===================== EVO-10 — Textures procédurales HD déterministes (canvas) =====================
+// Générées une fois, sans Math.random : PRNG semé → rendu stable. Chaque texture est liée à la nature de l'objet
+// qu'elle recouvre (bois vertical pour les troncs, troncs horizontaux pour les murs, pierre, herbe, feuillage…).
+const _mulberry32 = (a) => () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+const _cv = (s) => { const c = document.createElement("canvas"); c.width = c.height = s; return c; };
+const _tex = (cv, rx, ry) => { const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); t.anisotropy = 8; return t; };
+// Bois vertical (écorce / troncs) : veines longitudinales + nœuds.
+const makeBarkTex = (seed = 7) => {
+  const S = 512, c = _cv(S), g = c.getContext("2d"), r = _mulberry32(seed);
+  g.fillStyle = "#5a3a1e"; g.fillRect(0, 0, S, S);
+  for (let i = 0; i < 60; i++) { const x = r() * S; g.strokeStyle = i % 2 ? "#3a2410" : "#774e2a"; g.globalAlpha = 0.15 + r() * 0.3; g.lineWidth = 1 + r() * 4; g.beginPath(); for (let y = 0; y <= S; y += 6) { const xo = x + Math.sin(y * 0.025 + i) * 6 + (r() - 0.5) * 4; y === 0 ? g.moveTo(xo, y) : g.lineTo(xo, y); } g.stroke(); }
+  for (let k = 0; k < 4; k++) { const kx = r() * S, ky = r() * S, kr = 8 + r() * 16, grd = g.createRadialGradient(kx, ky, 1, kx, ky, kr); grd.addColorStop(0, "#2a1808"); grd.addColorStop(1, "rgba(0,0,0,0)"); g.globalAlpha = 0.6; g.fillStyle = grd; g.beginPath(); g.arc(kx, ky, kr, 0, 7); g.fill(); }
+  g.globalAlpha = 1; return _tex(c, 1.5, 3);
+};
+// Troncs/rondins horizontaux (murs de maisons) : rangées de demi-cylindres avec ombrage.
+const makeLogWallTex = (seed = 11) => {
+  const S = 512, c = _cv(S), g = c.getContext("2d"), r = _mulberry32(seed), rows = 7, h = S / rows;
+  g.fillStyle = "#6a4523"; g.fillRect(0, 0, S, S);
+  for (let i = 0; i < rows; i++) {
+    const y = i * h, grd = g.createLinearGradient(0, y, 0, y + h);
+    grd.addColorStop(0, "#3c2611"); grd.addColorStop(0.5, "#7a5230"); grd.addColorStop(1, "#2e1c0c");
+    g.fillStyle = grd; g.fillRect(0, y + 1, S, h - 2);
+    g.strokeStyle = "rgba(255,235,200,0.10)"; g.lineWidth = 1; g.beginPath(); g.moveTo(0, y + h * 0.32); g.lineTo(S, y + h * 0.32); g.stroke();
+    for (let v = 0; v < 40; v++) { g.strokeStyle = "rgba(40,24,10,0.25)"; g.globalAlpha = 0.3 + r() * 0.4; const x = r() * S; g.beginPath(); g.moveTo(x, y + 4); g.lineTo(x + (r() - 0.5) * 6, y + h - 4); g.stroke(); }
+    g.globalAlpha = 1;
+  }
+  return _tex(c, 2, 1.6);
+};
+// Pierre mouchetée (rochers, cheminées, stèles).
+const makeStoneTex = (seed = 23) => {
+  const S = 512, c = _cv(S), g = c.getContext("2d"), r = _mulberry32(seed);
+  g.fillStyle = "#8a8278"; g.fillRect(0, 0, S, S);
+  for (let i = 0; i < 2600; i++) { const x = r() * S, y = r() * S, v = 80 + r() * 110 | 0; g.fillStyle = `rgb(${v},${v - 8},${v - 18})`; g.globalAlpha = 0.5; g.fillRect(x, y, 1 + r() * 3, 1 + r() * 3); }
+  for (let i = 0; i < 14; i++) { g.strokeStyle = "rgba(30,26,22,0.5)"; g.globalAlpha = 0.5; g.lineWidth = 1 + r() * 2; g.beginPath(); let x = r() * S, y = r() * S; g.moveTo(x, y); for (let s = 0; s < 6; s++) { x += (r() - 0.5) * 90; y += (r() - 0.5) * 90; g.lineTo(x, y); } g.stroke(); }
+  g.globalAlpha = 1; return _tex(c, 2, 2);
+};
+// Herbe (sol planète) : brins courts en mouchetis vert.
+const makeGrassTex = (seed = 41) => {
+  const S = 512, c = _cv(S), g = c.getContext("2d"), r = _mulberry32(seed);
+  g.fillStyle = "#5f7340"; g.fillRect(0, 0, S, S);
+  for (let i = 0; i < 9000; i++) { const x = r() * S, y = r() * S, gr = 70 + r() * 90 | 0; g.strokeStyle = `rgb(${gr * 0.55 | 0},${gr},${gr * 0.45 | 0})`; g.globalAlpha = 0.5; g.lineWidth = 1; g.beginPath(); g.moveTo(x, y); g.lineTo(x + (r() - 0.5) * 3, y - 2 - r() * 4); g.stroke(); }
+  g.globalAlpha = 1; return _tex(c, 60, 60);
+};
+// Feuillage (cônes des arbres) : amas de feuilles.
+const makeFoliageTex = (seed = 57) => {
+  const S = 512, c = _cv(S), g = c.getContext("2d"), r = _mulberry32(seed);
+  g.fillStyle = "#2f5e2c"; g.fillRect(0, 0, S, S);
+  for (let i = 0; i < 1400; i++) { const x = r() * S, y = r() * S, gr = 70 + r() * 100 | 0; g.fillStyle = `rgb(${gr * 0.4 | 0},${gr},${gr * 0.35 | 0})`; g.globalAlpha = 0.45; g.beginPath(); g.ellipse(x, y, 2 + r() * 5, 1 + r() * 3, r() * 3, 0, 7); g.fill(); }
+  g.globalAlpha = 1; return _tex(c, 3, 3);
+};
+// Disque doux (particules : fumée, matière fantôme) — radial blanc transparent.
+const makeSoftDiscTex = () => {
+  const S = 128, c = _cv(S), g = c.getContext("2d"), grd = g.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+  grd.addColorStop(0, "rgba(255,255,255,1)"); grd.addColorStop(0.4, "rgba(255,255,255,0.5)"); grd.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = grd; g.fillRect(0, 0, S, S); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+};
+
 // ===================== EVO-7 — Couche tactile (smartphone / tablette) =====================
 // Pad joystick générique (deux exemplaires : DÉPLACER à gauche, REGARDER à droite).
 // onVec(x,y) reçoit un vecteur -1..1 ; le pad gauche pilote KeyW/S/A/D, le droit la visée continue.
@@ -532,6 +589,8 @@ export default function TimberHearth() {
     const H = mount.clientHeight || window.innerHeight || 720;
     try {
     const assets = new AssetManager();
+    // EVO-10 : textures procédurales partagées (générées une fois)
+    const TEX = { bark: makeBarkTex(), logWall: makeLogWallTex(), stone: makeStoneTex(), grass: makeGrassTex(), foliage: makeFoliageTex(), softDisc: makeSoftDiscTex() };
 
     // --- Persistance (Ship Log) — localStorage dispo en standalone (≠ artifact)
     const SAVE_KEY = "timberhearth_save_v1";
@@ -670,7 +729,7 @@ export default function TimberHearth() {
     }
     pg.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
     pg.computeVertexNormals();
-    const planetMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 });
+    const planetMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, map: TEX.grass });
     const planet = new THREE.Mesh(pg, planetMat);
     planet.receiveShadow = true; scene.add(planet);
     // Texture sol CC0 (multipliée par les vertexColors → garde la variation herbe/roche/sable)
@@ -690,6 +749,9 @@ export default function TimberHearth() {
     const flame = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.4, 8), new THREE.MeshBasicMaterial({ color: 0xff8833 }));
     flame.position.y = 0.9; campfire.add(flame);
     const fireLight = new THREE.PointLight(0xff8833, 50, 30, 2); fireLight.position.y = 1.2; campfire.add(fireLight);
+    // EVO-10 : fumée (sprites doux qui montent et s'estompent)
+    const smokeSprites = [];
+    for (let i = 0; i < 6; i++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: TEX.softDisc, color: 0x8c8c8c, transparent: true, opacity: 0, depthWrite: false })); sp.userData = { base: 1.6 + i * 0.45, phase: i / 6 }; campfire.add(sp); smokeSprites.push(sp); }
     placeOnSurface(campfire, 88, 0, 0);
     const campWorldPos = campfire.position.clone();
 
@@ -786,8 +848,7 @@ export default function TimberHearth() {
 
     // Tour de lancement + vaisseau
     const launch = new THREE.Group();
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3d1f08, roughness: 1 });
-    assets.loadTexture(ASSETS.barkTex, 1).then((t) => { if (t) { t.repeat.set(2, 6); trunkMat.map = t; trunkMat.needsUpdate = true; } });
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x6a4a2a, roughness: 1, map: TEX.bark });
     const trunk = new THREE.Mesh(new THREE.CylinderGeometry(2.5, 3.5, 25, 12), trunkMat);
     trunk.position.y = 12.5; trunk.castShadow = true; launch.add(trunk);
     const pad = new THREE.Mesh(new THREE.CylinderGeometry(4, 4, 0.4, 16), new THREE.MeshStandardMaterial({ color: 0x6a4a2a, metalness: 0.4 }));
@@ -879,12 +940,12 @@ export default function TimberHearth() {
     const houseDefs = [[87, -25, 0x5c3d1e, 0], [85, 18, 0x6a4520, 1], [83, 50, 0x8b6840, 2], [88, 35, 0x704030, 3], [83, -34, 0x5c3d1e, 4], [82, 14, 0x6a4520, 5]];
     houseDefs.forEach(([la, lo, tone, variant]) => {
       const h = new THREE.Group();
-      const b = new THREE.Mesh(new THREE.BoxGeometry(5, 3.5, 4), new THREE.MeshStandardMaterial({ color: tone, roughness: 1 }));
+      const b = new THREE.Mesh(new THREE.BoxGeometry(5, 3.5, 4), new THREE.MeshStandardMaterial({ color: tone, roughness: 1, map: TEX.logWall })); // EVO-10 : rondins horizontaux
       b.position.y = 1.75; b.castShadow = true; h.add(b);
-      const r = new THREE.Mesh(new THREE.ConeGeometry(4, 2, 4), new THREE.MeshStandardMaterial({ color: 0x2a1a08, roughness: 1 }));
+      const r = new THREE.Mesh(new THREE.ConeGeometry(4, 2, 4), new THREE.MeshStandardMaterial({ color: 0x6a5230, roughness: 1, map: TEX.bark }));
       r.position.y = 4.5; r.rotation.y = Math.PI / 4; h.add(r);
       // cheminée
-      const chim = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.6, 0.6), new THREE.MeshStandardMaterial({ color: 0x7a7268 }));
+      const chim = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.6, 0.6), new THREE.MeshStandardMaterial({ color: 0xffffff, map: TEX.stone }));
       chim.position.set(1.5, 4.4, 1); h.add(chim);
       // porte
       const door = new THREE.Mesh(new THREE.BoxGeometry(1.1, 2, 0.1), new THREE.MeshStandardMaterial({ color: 0x3a2510, roughness: 1 }));
@@ -939,7 +1000,7 @@ export default function TimberHearth() {
 
     // --- Cimetière des donateurs (§2.3) : trois stèles ---
     const grave = new THREE.Group();
-    const stoneMat = new THREE.MeshStandardMaterial({ color: 0x6a6258, roughness: 1 });
+    const stoneMat = new THREE.MeshStandardMaterial({ color: 0xb8b0a4, roughness: 1, map: TEX.stone });
     for (let i = 0; i < 3; i++) {
       const st = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.2, 0.18), stoneMat);
       st.position.set((i - 1) * 1.3, 0.6, 0); st.rotation.z = (Math.random() - 0.5) * 0.08; st.castShadow = true; grave.add(st);
@@ -962,9 +1023,8 @@ export default function TimberHearth() {
 
     // Arbres : GLB CC0 si présent, sinon procédural — instanciés autour du village
     let treePrototype = null;
-    const barkMat = new THREE.MeshStandardMaterial({ color: 0x4a2f15, roughness: 1 });
-    assets.loadTexture(ASSETS.barkTex, 1).then((t) => { if (t) { t.repeat.set(1, 2); barkMat.map = t; barkMat.needsUpdate = true; } });
-    const leafMat = new THREE.MeshStandardMaterial({ color: 0x3a6e3a, roughness: 1 });
+    const barkMat = new THREE.MeshStandardMaterial({ color: 0x7a5230, roughness: 1, map: TEX.bark });
+    const leafMat = new THREE.MeshStandardMaterial({ color: 0x6f9e5a, roughness: 1, map: TEX.foliage });
     const buildProceduralTree = () => null; // (EVO-4 : plus de prototype cloné, on instancie)
     const scatterTrees = () => {
       // EVO-4 : collecte des transforms puis 2 InstancedMesh (troncs/feuillages) → 2 draw calls au lieu de ~628
@@ -1008,7 +1068,7 @@ export default function TimberHearth() {
     // --- Relief : rochers (instanciés) et buttes ---
     const scatterRocks = () => {
       // EVO-4 : 3 géométries de roche pré-déformées → 3 InstancedMesh, couleur variée par instance
-      const rockMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true, vertexColors: false });
+      const rockMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, vertexColors: false, map: TEX.stone });
       const protos = [];
       for (let k = 0; k < 3; k++) {
         const g = new THREE.IcosahedronGeometry(1, 0); const p = g.attributes.position;
@@ -1116,7 +1176,7 @@ export default function TimberHearth() {
       gPos[i * 3] = ghostCenter.x + o.x; gPos[i * 3 + 1] = ghostCenter.y + o.y; gPos[i * 3 + 2] = ghostCenter.z + o.z;
     }
     const gGeo = new THREE.BufferGeometry(); gGeo.setAttribute("position", new THREE.BufferAttribute(gPos, 3));
-    const gMat = new THREE.PointsMaterial({ color: 0x00fff0, size: 0.35, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
+    const gMat = new THREE.PointsMaterial({ color: 0x00fff0, size: 0.45, map: TEX.softDisc, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
     const ghostPoints = new THREE.Points(gGeo, gMat); scene.add(ghostPoints);
     let ghostReveal = 0; // 0..1
 
@@ -1903,6 +1963,8 @@ export default function TimberHearth() {
       sky.material.uniforms.uDying.value = dyingF;
       fireLight.intensity = 45 + Math.sin(clock.elapsedTime * 12) * 8 + Math.random() * 4;
       flame.scale.y = 1 + Math.sin(clock.elapsedTime * 9) * 0.12;
+      // EVO-10 : fumée du feu (montée + fondu)
+      for (const sp of smokeSprites) { const tt = (clock.elapsedTime * 0.35 + sp.userData.phase) % 1; sp.position.set(Math.sin((clock.elapsedTime + sp.userData.phase * 6) * 1.2) * 0.35 * tt, sp.userData.base + tt * 2.4, 0); sp.scale.setScalar(0.45 + tt * 1.7); sp.material.opacity = 0.34 * (1 - tt); }
       bloom.strength = 0.45 + superF * 1.8; // supernova fait monter le bloom
       if (loopTime >= dur && !dying) supernova();
 
@@ -2041,16 +2103,26 @@ export default function TimberHearth() {
 
         // amortissement léger (stabilisateurs)
         shipState.vel.multiplyScalar(Math.pow(1 - CFG.SHIP_DAMP * 0.1, dt * 60));
+        const p0 = shipState.pos.clone();                     // position avant intégration
         shipState.pos.addScaledVector(shipState.vel, dt);
-        // collision sol : atterrissage (relatif au corps dominant)
+        // collision sol BALAYÉE : on teste le segment p0→pos (anti-tunneling à grande vitesse — fini la traversée de la lune)
         const rel2 = shipState.pos.clone().sub(body.center);
-        if (rel2.length() <= (body.home ? groundR(rel2.clone().normalize()) : body.R) + 2.2) {
-          shipState.pos.copy(body.center).add(rel2.normalize().multiplyScalar((body.home ? groundR(rel2.clone().normalize()) : body.R) + 2.2));
-          const vUp = shipState.vel.dot(upS);
-          if (vUp < 0) shipState.vel.addScaledVector(upS, -vUp);
+        const endR = (body.home ? groundR(rel2.clone().normalize()) : body.R) + 2.2;
+        const seg = shipState.pos.clone().sub(p0); const segLen2 = seg.lengthSq();
+        const tC = segLen2 > 1e-9 ? THREE.MathUtils.clamp(body.center.clone().sub(p0).dot(seg) / segLen2, 0, 1) : 0;
+        const closest = p0.clone().addScaledVector(seg, tC);
+        const nC = closest.clone().sub(body.center).normalize();
+        const sweptR = (body.home ? groundR(nC) : body.R) + 2.2;
+        if (rel2.length() <= endR || closest.distanceTo(body.center) <= sweptR) {
+          // direction d'impact : verticale finale si on est dedans, sinon point d'entrée (évite de ressortir de l'autre côté)
+          const nHit = (rel2.length() <= endR) ? rel2.clone().normalize() : nC;
+          const surfRH = (body.home ? groundR(nHit) : body.R) + 2.2;
+          shipState.pos.copy(body.center).addScaledVector(nHit, surfRH);
+          const vUp = shipState.vel.dot(nHit);
+          if (vUp < 0) shipState.vel.addScaledVector(nHit, -vUp);
           shipState.vel.multiplyScalar(Math.pow(0.1, dt * 60)); // friction au sol
           if (shipState.vel.length() < 2) {
-            const target = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), upS);
+            const target = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), nHit);
             shipState.quat.slerp(target, Math.min(1, dt * 2));
             shipState.landed = true;
           }
@@ -2791,8 +2863,8 @@ export default function TimberHearth() {
           {/* bouton plein écran */}
           <div onTouchStart={(e) => { e.preventDefault(); e.stopPropagation(); toggleFullscreen(); }}
             style={{ position: "absolute", top: 92, right: 12, width: 40, height: 40, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, color: "#cbd5e1", background: "rgba(8,20,32,.55)", border: "1px solid rgba(125,211,252,.35)", pointerEvents: "auto", touchAction: "none" }}>⛶</div>
-          {/* colonne gauche (au-dessus du pad de déplacement) : poussée verticale / saut */}
-          <div style={{ position: "absolute", left: 16, bottom: 168, display: "flex", flexDirection: "column", gap: 8, pointerEvents: "none" }}>
+          {/* cluster gauche (à côté du pad de déplacement) : poussée verticale / saut — compact, tient en paysage */}
+          <div style={{ position: "absolute", left: 156, bottom: 22, display: "flex", flexDirection: "column", gap: 8, pointerEvents: "none" }}>
             {flying ? (<>
               <TouchBtn label="MONT" color="#7dd3fc" onDown={() => touchApiRef.current?.hold("Space", true)} onUp={() => touchApiRef.current?.hold("Space", false)} />
               <TouchBtn label="DESC" color="#7dd3fc" onDown={() => touchApiRef.current?.hold("ShiftLeft", true)} onUp={() => touchApiRef.current?.hold("ShiftLeft", false)} />
@@ -2801,20 +2873,20 @@ export default function TimberHearth() {
               <TouchToggle label="COUR" color="rgba(125,211,252,.5)" code="ShiftLeft" api={touchApiRef} />
             </>)}
           </div>
-          {/* colonne droite (au-dessus du pad de visée) : actions */}
-          <div style={{ position: "absolute", right: 16, bottom: 168, display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end", pointerEvents: "none" }}>
+          {/* cluster droit (à côté du pad de visée) : actions — grille 2 colonnes ancrée en bas (ne déborde pas en paysage) */}
+          <div style={{ position: "absolute", right: 156, bottom: 22, width: 112, display: "flex", flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "flex-end", pointerEvents: "none" }}>
             {flying ? (<>
               <TouchBtn label="ALUN" color="#34d399" onDown={() => touchApiRef.current?.hold("KeyG", true)} onUp={() => touchApiRef.current?.hold("KeyG", false)} />
               <TouchBtn label="AUTO" color="#fbbf24" onDown={() => touchApiRef.current?.tap("auto")} />
-              <TiltToggle api={touchApiRef} />
               <TouchBtn label="SORT" onDown={() => touchApiRef.current?.tap("exit")} />
               <TouchBtn label="≡" onDown={() => touchApiRef.current?.tap("log")} />
+              <TiltToggle api={touchApiRef} />
             </>) : (<>
               <TouchBtn label="E" color="#fcd34d" onDown={() => touchApiRef.current?.tap("interact")} />
               <TouchBtn label="F" onDown={() => touchApiRef.current?.tap("scout")} />
               <TouchBtn label="C" onDown={() => touchApiRef.current?.tap("scope")} />
-              <TiltToggle api={touchApiRef} />
               <TouchBtn label="≡" onDown={() => touchApiRef.current?.tap("log")} />
+              <TiltToggle api={touchApiRef} />
             </>)}
           </div>
         </>
